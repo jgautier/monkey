@@ -16,6 +16,8 @@ enum TokenType {
     SLASH,
     LT,
     GT,
+    EQ,
+    NEQ,
 
     // Delimiters
     COMMA,
@@ -35,41 +37,55 @@ enum TokenType {
     RETURN
 }
 
-struct Token {
+struct Token<'a> {
     token_type: TokenType,
-    literal: Option<String>
+    literal: &'a str
 }
 
-impl Token {
-    pub fn from_chr(chr: char) -> Self {
+impl<'a> Token<'a> {
+    pub fn from_chr(chr: &str) -> Option<Self> {
         let t = match chr {
-            '0' => TokenType::EOF,
+            "0" => TokenType::EOF,
             //"IDENT" => TokenType::IDENT,
             //"INT" => TokenType::INT,
-            '=' => TokenType::ASSIGN,
-            '+' => TokenType::PLUS,
-            '-' => TokenType::MINUS,
-            '!' => TokenType::BANG,
-            '*' => TokenType::ASTERISK,
-            '/' => TokenType::SLASH,
-            '<' => TokenType::LT,
-            '>' => TokenType::GT,
-            ',' => TokenType::COMMA,
-            ';' => TokenType::SEMICOLON,
-            '(' => TokenType::LPAREN,
-            ')' => TokenType::RPAREN,
-            '{' => TokenType::LBRACE,
-            '}' => TokenType::RBRACE,
-            _ => TokenType::ILLEGAL
+            "=" => TokenType::ASSIGN,
+            "+" => TokenType::PLUS,
+            "-" => TokenType::MINUS,
+            "!" => TokenType::BANG,
+            "*" => TokenType::ASTERISK,
+            "/" => TokenType::SLASH,
+            "<" => TokenType::LT,
+            ">" => TokenType::GT,
+            "," => TokenType::COMMA,
+            ";" => TokenType::SEMICOLON,
+            "(" => TokenType::LPAREN,
+            ")" => TokenType::RPAREN,
+            "{" => TokenType::LBRACE,
+            "}" => TokenType::RBRACE,
+            _ => {
+                return None
+            }
         };
-        Self {
+        Some(Self {
             token_type: t,
-            literal: None
-        }
+            literal: ""
+        })
     }
-
-    pub fn from_string(string: String) -> Self {
-        let t = match string.as_ref() {
+    pub fn from_two_chars(chars: &str) -> Option<Self> {
+        let t = match chars {
+            "==" => TokenType::EQ,
+            "!=" => TokenType::NEQ,
+            _ => {
+                return None
+            }
+        };
+        Some(Self {
+            token_type: t,
+            literal: ""
+        })
+    }
+    pub fn from_identifier(string: &'a str) -> Option<Self> {
+        let t = match string {
             "let" => TokenType::LET,
             "fn" => TokenType::FUNCTION,
             "true" => TokenType::TRUE,
@@ -79,10 +95,10 @@ impl Token {
             "return" => TokenType::RETURN,
             _ => TokenType::IDENT
         };
-        Self {
+        Some(Self {
             token_type: t,
-            literal: Some(string)
-        }
+            literal: string
+        })
     }
 }
 
@@ -110,50 +126,74 @@ impl<'a> Lexer<'a> {
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = Token;
+    type Item = Token<'a>;
     
-    fn next(&mut self) -> Option<Token> {
+    fn next(&mut self) -> Option<Token<'a>> {
         self.skip_whitespace();
-        println!("{} curIndex", self.cur_index);
-        let chr = self.input[self.cur_index..].chars().next();
-        println!("{} chr", chr.unwrap());
-        match chr {
-            None => Some(Token{
-                token_type: TokenType::EOF,
-                literal: None
-            }),
-            _ => {
-                let chr = chr.unwrap();
-                let token = Token::from_chr(chr);
-                match token.token_type {
-                    TokenType::ILLEGAL => {
-                        // serach for string
-                        if chr.is_alphabetic() || chr == '_' {
-                            let identifier = self.input[self.cur_index..].chars().take_while(|chr| chr.is_alphabetic()).collect::<String>();
-                            println!("identifier{}blah", identifier);
-                            self.cur_index += identifier.len();
-                            Some(Token::from_string(identifier))
-                        } else if chr.is_numeric() {
-                            let number = self.input[self.cur_index..].chars().take_while(|chr| chr.is_numeric()).collect::<String>();
-                            println!("{} number", number);
-                            self.cur_index += number.len();
-                            Some(Token {
-                                token_type: TokenType::INT,
-                                literal: Some(number)
-                            })
-                        } else {
-                            println!("blah{}illegal", chr);
+        if self.cur_index + 1 > self.input.len() {
+            return None
+        }
+
+        if self.cur_index + 2 < self.input.len() {
+            let chars = &self.input[self.cur_index..self.cur_index + 2];
+            let token = Token::from_two_chars(chars);
+            match token {
+                Some(_) => {
+                    self.cur_index += 2;
+                    return token;
+                },
+                _ => {}
+            }
+        }
+        let chr = &self.input[self.cur_index..self.cur_index + 1];
+        let token = Token::from_chr(chr);
+        match token {
+            None => {
+                // serach for string
+                // convert this to a chr so we can use the is_* methods
+                let chr = chr.chars().next().unwrap();
+                if chr.is_alphabetic() || chr == '_' {
+                    let next_whitepace_index = self.input[self.cur_index..].chars().position(|chr| !chr.is_alphabetic());
+                    match next_whitepace_index {
+                        Some(num) => {
+                            self.cur_index += num;
+                            Token::from_identifier(&self.input[self.cur_index - num..self.cur_index])
+                        },
+                        _ => {
                             Some(Token {
                                 token_type: TokenType::ILLEGAL,
-                                literal: None
+                                literal: ""
                             })
                         }
-                    },
-                    _ => {
-                        self.cur_index += 1;
-                        Some(token)
                     }
+
+                } else if chr.is_numeric() {
+                    let next_whitepace_index = self.input[self.cur_index..].chars().position(|chr| !chr.is_numeric());
+                    match next_whitepace_index {
+                        Some(num) => {
+                            self.cur_index += num;
+                            Some(Token {
+                                token_type: TokenType::INT,
+                                literal: &self.input[self.cur_index - num..self.cur_index]
+                            })
+                        },
+                        _ => {
+                            Some(Token {
+                                token_type: TokenType::ILLEGAL,
+                                literal: ""
+                            })
+                        }
+                    }
+                } else {
+                    Some(Token {
+                        token_type: TokenType::ILLEGAL,
+                        literal: ""
+                    })
                 }
+            },
+            Some(_) => {
+                self.cur_index += 1;
+                token
             }
         }
     }
@@ -180,16 +220,19 @@ mod tests {
             } else {
                 return false;
             }
+
+            10 == 10;
+            10 != 9;
         ";
         let mut lexer = Lexer::new(&INPUT);
         assert_eq!(TokenType::LET, lexer.next().unwrap().token_type);
         let five_identifier = lexer.next().unwrap();
         assert_eq!(TokenType::IDENT, five_identifier.token_type);
-        assert_eq!("five", five_identifier.literal.unwrap());
+        assert_eq!("five", five_identifier.literal);
         assert_eq!(TokenType::ASSIGN, lexer.next().unwrap().token_type);
         let five_number = lexer.next().unwrap();
         assert_eq!(TokenType::INT, five_number.token_type);
-        assert_eq!("5", five_number.literal.unwrap());
+        assert_eq!("5", five_number.literal);
         assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
         assert_eq!(TokenType::LET, lexer.next().unwrap().token_type);
         assert_eq!(TokenType::IDENT, lexer.next().unwrap().token_type);
@@ -231,30 +274,30 @@ mod tests {
         assert_eq!(TokenType::ASTERISK, lexer.next().unwrap().token_type);
         let five_number = lexer.next().unwrap();
         assert_eq!(TokenType::INT, five_number.token_type);
-        assert_eq!("5", five_number.literal.unwrap());
+        assert_eq!("5", five_number.literal);
         assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
         let five_number = lexer.next().unwrap();
         assert_eq!(TokenType::INT, five_number.token_type);
-        assert_eq!("5", five_number.literal.unwrap());
+        assert_eq!("5", five_number.literal);
         assert_eq!(TokenType::LT, lexer.next().unwrap().token_type);
         let ten_number = lexer.next().unwrap();
         assert_eq!(TokenType::INT, five_number.token_type);
-        assert_eq!("10", ten_number.literal.unwrap());
+        assert_eq!("10", ten_number.literal);
         assert_eq!(TokenType::GT, lexer.next().unwrap().token_type);
         let five_number = lexer.next().unwrap();
         assert_eq!(TokenType::INT, five_number.token_type);
-        assert_eq!("5", five_number.literal.unwrap());
+        assert_eq!("5", five_number.literal);
         assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
 
         assert_eq!(TokenType::IF, lexer.next().unwrap().token_type);
         assert_eq!(TokenType::LPAREN, lexer.next().unwrap().token_type);
          let five_number = lexer.next().unwrap();
         assert_eq!(TokenType::INT, five_number.token_type);
-        assert_eq!("5", five_number.literal.unwrap());
+        assert_eq!("5", five_number.literal);
         assert_eq!(TokenType::LT, lexer.next().unwrap().token_type);
         let ten_number = lexer.next().unwrap();
         assert_eq!(TokenType::INT, five_number.token_type);
-        assert_eq!("10", ten_number.literal.unwrap());
+        assert_eq!("10", ten_number.literal);
         assert_eq!(TokenType::RPAREN, lexer.next().unwrap().token_type);
         assert_eq!(TokenType::LBRACE, lexer.next().unwrap().token_type);
         assert_eq!(TokenType::RETURN, lexer.next().unwrap().token_type);
@@ -267,5 +310,23 @@ mod tests {
         assert_eq!(TokenType::FALSE, lexer.next().unwrap().token_type);
         assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
         assert_eq!(TokenType::RBRACE, lexer.next().unwrap().token_type);
+
+        let ten_number = lexer.next().unwrap();
+        assert_eq!(TokenType::INT, ten_number.token_type);
+        assert_eq!("10", ten_number.literal);
+        assert_eq!(TokenType::EQ, lexer.next().unwrap().token_type);
+        let ten_number = lexer.next().unwrap();
+        assert_eq!(TokenType::INT, ten_number.token_type);
+        assert_eq!("10", ten_number.literal);
+        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
+
+        let ten_number = lexer.next().unwrap();
+        assert_eq!(TokenType::INT, ten_number.token_type);
+        assert_eq!("10", ten_number.literal);
+        assert_eq!(TokenType::NEQ, lexer.next().unwrap().token_type);
+        let nine_number = lexer.next().unwrap();
+        assert_eq!(TokenType::INT, nine_number.token_type);
+        assert_eq!("9", nine_number.literal);
+        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
     }
 }
