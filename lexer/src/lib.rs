@@ -43,7 +43,7 @@ struct Token<'a> {
 }
 
 impl<'a> Token<'a> {
-    pub fn from_chr(chr: &str) -> Option<Self> {
+    pub fn from_chr(chr: &'a str) -> Option<Self> {
         let t = match chr {
             "0" => TokenType::EOF,
             //"IDENT" => TokenType::IDENT,
@@ -68,10 +68,10 @@ impl<'a> Token<'a> {
         };
         Some(Self {
             token_type: t,
-            literal: ""
+            literal: chr
         })
     }
-    pub fn from_two_chars(chars: &str) -> Option<Self> {
+    pub fn from_two_chars(chars: &'a str) -> Option<Self> {
         let t = match chars {
             "==" => TokenType::EQ,
             "!=" => TokenType::NEQ,
@@ -81,7 +81,7 @@ impl<'a> Token<'a> {
         };
         Some(Self {
             token_type: t,
-            literal: ""
+            literal: chars
         })
     }
     pub fn from_identifier(string: &'a str) -> Option<Self> {
