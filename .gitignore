@@ -1,3 +1,2 @@
-/lexer/target
-/target
+**/target
 **/*.rs.bk

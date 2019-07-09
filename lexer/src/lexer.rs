@@ -1,5 +1,7 @@
+use std::fmt;
+
 #[derive(PartialEq, Eq, Debug)]
-enum TokenType {
+pub enum TokenType {
     ILLEGAL,
     EOF,
 
@@ -37,9 +39,21 @@ enum TokenType {
     RETURN
 }
 
-struct Token<'a> {
-    token_type: TokenType,
-    literal: &'a str
+impl fmt::Display for TokenType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+pub struct Token<'a> {
+    pub token_type: TokenType,
+    pub literal: &'a str
+}
+
+impl fmt::Display for Token<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "TokenType: {}, literal: {}", self.token_type, self.literal)
+    }
 }
 
 impl<'a> Token<'a> {
@@ -102,13 +116,13 @@ impl<'a> Token<'a> {
     }
 }
 
-struct Lexer<'a> {
+pub struct Lexer<'a> {
     cur_index: usize,
     input: &'a str
 }
 
 impl<'a> Lexer<'a> {
-    pub fn new(input: &'static str) -> Self {
+    pub fn new(input: &'a str) -> Self {
         Self {
             cur_index: 0,
             input: input
