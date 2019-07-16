@@ -3,7 +3,9 @@ struct Node<'a> {
     token: lexer::Token<'a>
 }
 
-trait Statement {}
+trait Statement {
+    name: Identifier
+}
 
 struct Expression<'a> {
     node: Node<'a>
@@ -99,6 +101,9 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn test_let_statement(statement: &Statement, name: &str) {
+        assert_eq!(statement.name.value, name);
+    }
     #[test]
     fn let_statements() {
         let input = "
@@ -109,5 +114,10 @@ mod tests {
         let lexer = lexer::Lexer::new(&input);
         let mut parser = Parser::new(lexer);
         let program = parser.parse();
+        let identifiers = vec!["x", "y", "foobar"];
+        for i in 0..3 {
+            test_let_statement(program.statements[i], identifiers[i]);
+        }
+
     }
 }
