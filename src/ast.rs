@@ -18,8 +18,9 @@ struct Identifier<'a> {
 }
 
 struct LetStatement<'a> {
+    //token: lexer::Token<'a>,
     name: Identifier<'a>,
-    value: Expression<'a> 
+    //value: Expression<'a> 
 }
 
 impl<'a> Statement for LetStatement<'a> {}
@@ -41,16 +42,58 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn next_token(mut self) {
-        self.cur_token = self.peek_token;
-        self.peek_token = self.lexer.next().unwrap();
-    }
-
-    pub fn parse() -> Program<'a> {
-        Program {
-            statements: Vec::<&'a Statement>::new()
+    fn next_token(&mut self) { 
+        std::mem::swap(&mut self.cur_token, &mut self.peek_token);
+        match self.lexer.next() {
+            Some(token) => self.peek_token = token,
+            _=> {}
         }
     }
+
+    pub fn parse(&mut self) -> Program<'a> {
+        let program = Program {
+            statements: Vec::<&'a Statement>::new()
+        };
+        while self.cur_token.token_type != lexer::TokenType::EOF {
+            self.parse_statment();
+            self.next_token();
+        }
+        program
+    }
+
+    fn parse_let_statment(&mut self) -> Option<&'a Statement> {
+
+        self.expect_peek(lexer::TokenType::IDENT);
+
+        //let name = Identifier { value: self.cur_token.literal };
+
+        while self.cur_token.token_type == lexer::TokenType::SEMICOLON {
+
+        }
+
+        Some(&LetStatement {
+            name: Identifier { value: "name" }
+            //value: "test"
+        })
+    }
+
+    fn parse_statment(&mut self) {
+        let parser = self;
+        match parser.cur_token.token_type {
+            lexer::TokenType::LET => parser.parse_let_statment(),
+            _ => None
+        };
+    }
+
+    fn expect_peek(&mut self, token_type: lexer::TokenType) -> bool {
+        if self.peek_token.token_type == token_type {
+            self.next_token();
+            true
+        } else {
+            false
+        }
+    }
+
 }
 
 #[cfg(test)]
@@ -63,5 +106,8 @@ mod tests {
             let y = 10;
             let foobar = 838383;
         ";
+        let lexer = lexer::Lexer::new(&input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
     }
 }

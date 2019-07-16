@@ -144,7 +144,10 @@ impl<'a> Iterator for Lexer<'a> {
     fn next(&mut self) -> Option<Token<'a>> {
         self.skip_whitespace();
         if self.cur_index + 1 > self.input.len() {
-            return None
+            return Some(Token {
+                token_type: TokenType::EOF,
+                literal: "EOF"
+            })
         }
 
         if self.cur_index + 2 < self.input.len() {
@@ -341,5 +344,6 @@ mod tests {
         assert_eq!(TokenType::INT, nine_number.token_type);
         assert_eq!("9", nine_number.literal);
         assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::EOF, lexer.next().unwrap().token_type);
     }
 }
