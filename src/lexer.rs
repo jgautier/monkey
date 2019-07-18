@@ -1,5 +1,5 @@
 use std::fmt;
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
 pub enum TokenType {
     ILLEGAL,
     EOF,
@@ -43,7 +43,7 @@ impl fmt::Display for TokenType {
         write!(f, "{:?}", self)
     }
 }
-
+#[derive(Copy,Clone)]
 pub struct Token<'a> {
     pub token_type: TokenType,
     pub literal: &'a str
