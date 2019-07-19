@@ -1,21 +1,34 @@
 use crate::lexer;
-struct Node<'a> {
-    token: lexer::Token<'a>
+trait Node<'a> {
+    fn to_string(self) -> &'a str;
 }
 
 enum StatementType<'a> {
     Let(LetStatement<'a>),
-    Return(ReturnStatement<'a>)
+    Return(ReturnStatement<'a>),
+    Expression(ExpressionStatement<'a>)
+}
+
+impl<'a> Node<'a> for StatementType<'a> {
+    fn to_string() -> &'a str {
+        "hello"
+    }
 }
 
 trait Statement {}
 
-struct Expression<'a> {
+/*struct Expression<'a> {
     node: Node<'a>
-}
+}*/
 
 struct Program<'a> {
     statements: Vec<StatementType<'a>>
+}
+
+impl<'a> Node<'a> for Program<'a> {
+    fn to_string(self) -> &'a str {
+        self.statements.iter().map(|node| node.to_string()).collect().concat()
+    }
 }
 
 struct Identifier<'a> {
@@ -28,9 +41,26 @@ struct LetStatement<'a> {
     //value: Expression<'a> 
 }
 
+impl<'a> Node<'a> for LetStatement<'a> {
+    fn to_string(self) -> &'a str {
+        &format!("let {} = {};\n", self.name.token.literal, "expression here")
+    }
+}
+
 struct ReturnStatement<'a> {
     token: lexer::Token<'a>,
     //value: Expression<'a> 
+}
+
+impl<'a> Node<'a> for ReturnStatement<'a> {
+    fn to_string(self) -> &'a str {
+        &format!("return {};\n", "expression here")
+    }
+}
+
+
+struct ExpressionStatement<'a> {
+    token: lexer::Token<'a>
 }
 
 impl<'a> Statement for LetStatement<'a> {}
