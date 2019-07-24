@@ -1,8 +1,8 @@
 use crate::lexer;
 trait Node<'a> {
-    fn to_string(self) -> &'a str;
+    fn to_string(self) -> String;
 }
-
+#[derive(Clone, Copy)]
 enum StatementType<'a> {
     Let(LetStatement<'a>),
     Return(ReturnStatement<'a>),
@@ -10,8 +10,8 @@ enum StatementType<'a> {
 }
 
 impl<'a> Node<'a> for StatementType<'a> {
-    fn to_string() -> &'a str {
-        "hello"
+    fn to_string(self) -> String {
+        "hello".to_string()
     }
 }
 
@@ -26,15 +26,18 @@ struct Program<'a> {
 }
 
 impl<'a> Node<'a> for Program<'a> {
-    fn to_string(self) -> &'a str {
-        self.statements.iter().map(|node| node.to_string()).collect().concat()
+    fn to_string(self) -> String {
+        let statement_strs = self.statements.iter().map(|node| node.to_string()).collect::<Vec<String>>();
+        statement_strs.concat()
     }
 }
 
+#[derive(Clone, Copy)]
 struct Identifier<'a> {
     token: lexer::Token<'a>
 }
 
+#[derive(Clone, Copy)]
 struct LetStatement<'a> {
     token: lexer::Token<'a>,
     name: Identifier<'a>,
@@ -42,23 +45,24 @@ struct LetStatement<'a> {
 }
 
 impl<'a> Node<'a> for LetStatement<'a> {
-    fn to_string(self) -> &'a str {
-        &format!("let {} = {};\n", self.name.token.literal, "expression here")
+    fn to_string(self) -> String {
+        format!("let {} = {};\n", self.name.token.literal, "expression here").to_string()
     }
 }
 
+#[derive(Clone, Copy)]
 struct ReturnStatement<'a> {
     token: lexer::Token<'a>,
     //value: Expression<'a> 
 }
 
 impl<'a> Node<'a> for ReturnStatement<'a> {
-    fn to_string(self) -> &'a str {
-        &format!("return {};\n", "expression here")
+    fn to_string(self) -> String {
+        format!("return {};\n", "expression here").to_string()
     }
 }
 
-
+#[derive(Clone, Copy)]
 struct ExpressionStatement<'a> {
     token: lexer::Token<'a>
 }
@@ -97,7 +101,7 @@ impl<'a> Parser<'a> {
             statements: Vec::<StatementType<'a>>::new()
         };
         while self.cur_token.token_type != lexer::TokenType::EOF {
-            let statement = self.parse_statment();
+            let statement = self.parse_statement();
             match statement {
                 Some(statement) => program.statements.push(statement),
                 _ => {}// do nothing
@@ -106,14 +110,14 @@ impl<'a> Parser<'a> {
         }
         program
     }
-    fn parse_return_statement(&mut self) -> StatementType<'a> {
+    fn parse_return_statement(&mut self) -> Option<StatementType<'a>> {
         let return_statement = ReturnStatement {
             token: self.cur_token
         };
         while self.cur_token.token_type != lexer::TokenType::SEMICOLON {
             self.next_token();
         };
-        StatementType::Return(return_statement)
+        Some(StatementType::Return(return_statement))
     }
     fn parse_let_statment(&mut self) -> Option<StatementType<'a>> {
 
@@ -141,9 +145,10 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_statment(&mut self) -> Option<StatementType<'a>> {
+    fn parse_statement(&mut self) -> Option<StatementType<'a>> {
         match self.cur_token.token_type {
             lexer::TokenType::LET => self.parse_let_statment(),
+            lexer::TokenType::RETURN => self.parse_return_statement(),
             _ => None
         }
     }
@@ -174,7 +179,9 @@ mod tests {
                 assert_eq!(statement.token.token_type, lexer::TokenType::LET);
                 assert_eq!(statement.name.token.literal, name);
             },
-            _ => {/* we're only testing let statements here */}
+            _ => {
+                assert!(false, "received wrong statement type")
+            }
         }
     }
 
@@ -183,7 +190,9 @@ mod tests {
             StatementType::Return(statement) => {
                 assert_eq!(statement.token.token_type, lexer::TokenType::RETURN);
             },
-            _ => {/* we're only testing let statements here */}
+            _ => {
+                 assert!(false, "received wrong statement type")
+            }
         }
     }
 
@@ -207,9 +216,9 @@ mod tests {
     #[test]
     fn return_statements() {
          let input = "
-            let x = 5;
-            let y = 10;
-            let foobar = 838383;
+            return 5;
+            return 10;
+            return 993322;
         ";
         let lexer = lexer::Lexer::new(&input);
         let mut parser = Parser::new(lexer);
