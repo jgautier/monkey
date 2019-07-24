@@ -228,4 +228,18 @@ mod tests {
             test_return_statement(&statement);
         }
     }
+    #[test]
+    fn to_string() {
+        let program = {
+            statements: vec![
+                LetStatement {
+                    token: lexer::TokenType::LET,
+                    name: &Identifier {
+                        token_type: lexer::TokenType::IDENT,
+                        literal: "myVar"
+                    }
+                }
+            ]
+        }
+    }
 }
