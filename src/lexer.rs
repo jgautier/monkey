@@ -1,5 +1,5 @@
 use std::fmt;
-#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 pub enum TokenType {
     ILLEGAL,
     EOF,

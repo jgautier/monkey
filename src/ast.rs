@@ -1,7 +1,10 @@
+use std::collections::HashMap;
 use crate::lexer;
+
 trait Node<'a> {
     fn to_string(self) -> String;
 }
+
 #[derive(Clone, Copy)]
 enum StatementType<'a> {
     Let(LetStatement<'a>),
@@ -14,12 +17,6 @@ impl<'a> Node<'a> for StatementType<'a> {
         "hello".to_string()
     }
 }
-
-trait Statement {}
-
-/*struct Expression<'a> {
-    node: Node<'a>
-}*/
 
 struct Program<'a> {
     statements: Vec<StatementType<'a>>
@@ -64,10 +61,31 @@ impl<'a> Node<'a> for ReturnStatement<'a> {
 
 #[derive(Clone, Copy)]
 struct ExpressionStatement<'a> {
-    token: lexer::Token<'a>
+    token: lexer::Token<'a>,
+    expr: Expression<'a>
 }
 
-impl<'a> Statement for LetStatement<'a> {}
+#[derive(Clone, Copy)]
+struct IntegerLiteral<'a> {
+    token: lexer::Token<'a>,
+    value: f64
+}
+
+#[derive(Clone, Copy)]
+enum Expression<'a> {
+    Identifier(Identifier<'a>),
+    IntegerLiteral(IntegerLiteral<'a>)
+}
+
+enum OperatorPrecedence {
+    LOWEST,
+    EQUALS,
+    LESSGREATER,
+    SUM,
+    PRODUCT,
+    PREFIX,
+    CALL
+}
 
 struct Parser<'a> {
     lexer: lexer::Lexer<'a>,
@@ -84,7 +102,7 @@ impl<'a> Parser<'a> {
             lexer: lexer,
             cur_token: cur_token,
             peek_token: peek_token,
-            errors: Vec::<String>::new()
+            errors: Vec::<String>::new(),
         }
     }
 
@@ -149,8 +167,45 @@ impl<'a> Parser<'a> {
         match self.cur_token.token_type {
             lexer::TokenType::LET => self.parse_let_statment(),
             lexer::TokenType::RETURN => self.parse_return_statement(),
-            _ => None
+            _ => self.parse_expression_statement()
         }
+    }
+
+    fn parse_expression_statement(&mut self) -> Option<StatementType<'a>> {
+        let expression = self.parse_expression(OperatorPrecedence::LOWEST)?;
+        let expression_stmt = ExpressionStatement{ 
+            token: self.cur_token,
+            expr: expression
+        };
+        if (self.peek_token.token_type == lexer::TokenType::SEMICOLON) {
+            self.next_token();
+        }
+        Some(StatementType::Expression(expression_stmt))
+    }
+
+    fn parse_expression(&mut self, precedence: OperatorPrecedence) -> Option<Expression<'a>> {
+        match self.cur_token.token_type {
+            lexer::TokenType::IDENT => Some(self.parse_identifier_expression()),
+            lexer::TokenType::INT => Some(self.parse_integer_literal_expression()?),
+            _=> None
+        }
+    }
+
+    fn parse_identifier_expression(&mut self) -> Expression<'a> {
+        Expression::Identifier(Identifier{ token: self.cur_token })
+    }
+
+    fn parse_integer_literal_expression(&mut self) -> Option<Expression<'a>> {
+        match self.cur_token.literal.parse() {
+            Ok(value) => {
+                Some(Expression::IntegerLiteral(IntegerLiteral{ token: self.cur_token, value: value }))
+            },
+            Err(e) => {
+                self.errors.push(format!("Error parsing integer literal: {}", e));
+                None
+            }
+        }
+        
     }
 
     fn expect_peek(&mut self, token_type: lexer::TokenType) -> bool {
@@ -230,16 +285,56 @@ mod tests {
     }
     #[test]
     fn to_string() {
-        let program = {
+        let program = Program {
             statements: vec![
-                LetStatement {
-                    token: lexer::TokenType::LET,
-                    name: &Identifier {
-                        token_type: lexer::TokenType::IDENT,
-                        literal: "myVar"
+                StatementType::Let(LetStatement {
+                    token: lexer::Token{ token_type: lexer::TokenType::LET, literal: "let"},
+                    name: Identifier {
+                        token: lexer::Token { token_type: lexer::TokenType::IDENT, literal: "myVar"}
                     }
-                }
+                })
             ]
+        };
+    }
+
+    #[test]
+    fn parse_identifier_expression() {
+        let input = "
+            blah;
+        ";
+        let lexer = lexer::Lexer::new(&input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parse_errors(parser);
+        assert_eq!(program.statements.len(), 1);
+        match program.statements[0] {
+            StatementType::Expression(stmt) => {
+                match stmt.expr {
+                    Expression::Identifier(expr) =>  assert_eq!(expr.token.literal, "blah"),
+                    _ => {}
+                }              
+            },
+            _ => assert!(false, "wrong statement type")
+        }
+    }
+    #[test]
+    fn parse_integer_literal_expression() {
+        let input = "
+            5;
+        ";
+        let lexer = lexer::Lexer::new(&input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parse_errors(parser);
+        assert_eq!(program.statements.len(), 1);
+        match program.statements[0] {
+            StatementType::Expression(stmt) => {
+                match stmt.expr {
+                    Expression::IntegerLiteral(expr) =>  assert_eq!(expr.value, 5f64),
+                    _ => {}
+                }              
+            },
+            _ => assert!(false, "wrong statement type")
         }
     }
 }
