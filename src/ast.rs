@@ -68,7 +68,7 @@ struct ExpressionStatement<'a> {
 #[derive(Clone, Copy)]
 struct IntegerLiteral<'a> {
     token: lexer::Token<'a>,
-    value: f64
+    value: i64
 }
 
 #[derive(Clone, Copy)]
@@ -330,7 +330,7 @@ mod tests {
         match program.statements[0] {
             StatementType::Expression(stmt) => {
                 match stmt.expr {
-                    Expression::IntegerLiteral(expr) =>  assert_eq!(expr.value, 5f64),
+                    Expression::IntegerLiteral(expr) =>  assert_eq!(expr.value, 5i64),
                     _ => {}
                 }              
             },
