@@ -5,7 +5,7 @@ trait Node<'a> {
     fn to_string(self) -> String;
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum StatementType<'a> {
     Let(LetStatement<'a>),
     Return(ReturnStatement<'a>),
@@ -24,7 +24,7 @@ struct Program<'a> {
 
 impl<'a> Node<'a> for Program<'a> {
     fn to_string(self) -> String {
-        let statement_strs = self.statements.iter().map(|node| node.to_string()).collect::<Vec<String>>();
+        let statement_strs = self.statements.iter().map(|node| node.clone().to_string()).collect::<Vec<String>>();
         statement_strs.concat()
     }
 }
@@ -32,6 +32,12 @@ impl<'a> Node<'a> for Program<'a> {
 #[derive(Clone, Copy)]
 struct Identifier<'a> {
     token: lexer::Token<'a>
+}
+
+impl<'a> Node<'a> for Identifier<'a> {
+    fn to_string(self) -> String {
+        format!("{}", self.token.literal)
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -59,7 +65,7 @@ impl<'a> Node<'a> for ReturnStatement<'a> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct ExpressionStatement<'a> {
     token: lexer::Token<'a>,
     expr: Expression<'a>
@@ -71,10 +77,36 @@ struct IntegerLiteral<'a> {
     value: i64
 }
 
-#[derive(Clone, Copy)]
+impl<'a> Node<'a> for IntegerLiteral<'a> {
+    fn to_string(self) -> String {
+        format!("{}", self.value)
+    }
+}
+
+#[derive(Clone)]
+struct Prefix<'a> {
+    token: lexer::Token<'a>,
+    operator: &'a str,
+    right: Box<Expression<'a>>
+}
+
+impl<'a> Node<'a> for Prefix<'a> {
+    fn to_string(self) -> String {
+        format!("({}{})", self.operator, self.right.to_string())
+    }
+}
+
+#[derive(Clone)]
 enum Expression<'a> {
     Identifier(Identifier<'a>),
-    IntegerLiteral(IntegerLiteral<'a>)
+    IntegerLiteral(IntegerLiteral<'a>),
+    Prefix(Prefix<'a>)
+}
+
+impl<'a> Node<'a> for Expression<'a> {
+    fn to_string(self) -> String {
+        self.to_string()
+    }
 }
 
 enum OperatorPrecedence {
@@ -187,6 +219,7 @@ impl<'a> Parser<'a> {
         match self.cur_token.token_type {
             lexer::TokenType::IDENT => Some(self.parse_identifier_expression()),
             lexer::TokenType::INT => Some(self.parse_integer_literal_expression()?),
+            lexer::TokenType::BANG | lexer::TokenType::MINUS => self.parse_prefix_expression(),
             _=> None
         }
     }
@@ -205,7 +238,16 @@ impl<'a> Parser<'a> {
                 None
             }
         }
-        
+    }
+
+    fn parse_prefix_expression(&mut self) -> Option<Expression<'a>> {
+        let operator = self.cur_token.literal;
+        let token = self.cur_token;
+        self.next_token();
+        match self.parse_expression(OperatorPrecedence::PREFIX) {
+            Some(expr) => Some(Expression::Prefix(Prefix{ token: token, operator: operator, right: Box::new(expr) })),
+            None => None
+        }
     }
 
     fn expect_peek(&mut self, token_type: lexer::TokenType) -> bool {
@@ -307,9 +349,9 @@ mod tests {
         let program = parser.parse();
         check_parse_errors(parser);
         assert_eq!(program.statements.len(), 1);
-        match program.statements[0] {
+        match &program.statements[0] {
             StatementType::Expression(stmt) => {
-                match stmt.expr {
+                match &stmt.expr {
                     Expression::Identifier(expr) =>  assert_eq!(expr.token.literal, "blah"),
                     _ => {}
                 }              
@@ -327,11 +369,44 @@ mod tests {
         let program = parser.parse();
         check_parse_errors(parser);
         assert_eq!(program.statements.len(), 1);
-        match program.statements[0] {
+        match &program.statements[0] {
             StatementType::Expression(stmt) => {
-                match stmt.expr {
+                match &stmt.expr {
                     Expression::IntegerLiteral(expr) =>  assert_eq!(expr.value, 5i64),
                     _ => {}
+                }              
+            },
+            _ => assert!(false, "wrong statement type")
+        }
+    }
+
+    #[test]
+    fn parse_prefix_expression() {
+        let input = "
+            !5;
+        ";
+        let lexer = lexer::Lexer::new(&input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parse_errors(parser);
+        assert_eq!(program.statements.len(), 1);
+        match &program.statements[0] {
+            StatementType::Expression(stmt) => {
+                match &stmt.expr {
+                    Expression::Prefix(expr) => {
+                        assert_eq!(expr.operator, "!");
+                        match *expr.right {
+                            Expression::IntegerLiteral(i) => {
+                                assert_eq!(i.value, 5)
+                            },
+                            _ => {
+                                assert!(false, "wrong expression type")
+                            }
+                        }
+                    }
+                    _ => {
+                        assert!(false, "wrong expression type")
+                    }
                 }              
             },
             _ => assert!(false, "wrong statement type")
