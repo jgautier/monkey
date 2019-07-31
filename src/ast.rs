@@ -97,10 +97,25 @@ impl<'a> Node<'a> for Prefix<'a> {
 }
 
 #[derive(Clone)]
+struct Infix<'a> {
+    token: lexer::Token<'a>,
+    operator: &'a str,
+    right: Box<Expression<'a>>,
+    left: Box<Expression<'a>>
+}
+
+impl<'a> Node<'a> for Infix<'a> {
+    fn to_string(self) -> String {
+        format!("({}{}{})", self.left.to_string(), self.operator, self.right.to_string())
+    }
+}
+
+#[derive(Clone)]
 enum Expression<'a> {
     Identifier(Identifier<'a>),
     IntegerLiteral(IntegerLiteral<'a>),
-    Prefix(Prefix<'a>)
+    Prefix(Prefix<'a>),
+    Infix(Infix<'a>)
 }
 
 impl<'a> Node<'a> for Expression<'a> {
@@ -109,6 +124,7 @@ impl<'a> Node<'a> for Expression<'a> {
     }
 }
 
+#[derive(PartialOrd, PartialEq)]
 enum OperatorPrecedence {
     LOWEST,
     EQUALS,
@@ -216,12 +232,19 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expression(&mut self, precedence: OperatorPrecedence) -> Option<Expression<'a>> {
-        match self.cur_token.token_type {
-            lexer::TokenType::IDENT => Some(self.parse_identifier_expression()),
-            lexer::TokenType::INT => Some(self.parse_integer_literal_expression()?),
-            lexer::TokenType::BANG | lexer::TokenType::MINUS => self.parse_prefix_expression(),
-            _=> None
-        }
+        let mut left = match self.cur_token.token_type {
+            lexer::TokenType::IDENT => self.parse_identifier_expression(),
+            lexer::TokenType::INT => self.parse_integer_literal_expression()?,
+            lexer::TokenType::BANG | lexer::TokenType::MINUS => self.parse_prefix_expression()?,
+            _=> return None
+        };
+
+        while self.peek_token.token_type != lexer::TokenType::SEMICOLON && precedence < self.peek_precedence() {
+            self.next_token();
+            left = self.parse_infix_expression(left)?;
+        } 
+
+        Some(left)
     }
 
     fn parse_identifier_expression(&mut self) -> Expression<'a> {
@@ -250,6 +273,17 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_infix_expression(&mut self, left: Expression<'a>) -> Option<Expression<'a>> {
+        let operator = self.cur_token.literal;
+        let token = self.cur_token;
+        let precedence = self.cur_precedence();
+        self.next_token();
+        match self.parse_expression(precedence) {
+            Some(expr) => Some(Expression::Infix(Infix{ token: token, left: Box::new(left), operator: operator, right: Box::new(expr) })),
+            None => None
+        }
+    }
+
     fn expect_peek(&mut self, token_type: lexer::TokenType) -> bool {
         if self.peek_token.token_type == token_type {
             self.next_token();
@@ -258,6 +292,27 @@ impl<'a> Parser<'a> {
             self.errors.push(format!("expected token {} but found token {}", token_type, self.peek_token.token_type));
             false
         }
+    }
+    fn get_precedence(token_type: lexer::TokenType) -> OperatorPrecedence {
+        match token_type {
+            lexer::TokenType::EQ => OperatorPrecedence::EQUALS,
+            lexer::TokenType::NEQ => OperatorPrecedence::EQUALS,
+            lexer::TokenType::GT => OperatorPrecedence::LESSGREATER,
+            lexer::TokenType::LT => OperatorPrecedence::LESSGREATER,
+            lexer::TokenType::PLUS => OperatorPrecedence::SUM,
+            lexer::TokenType::MINUS => OperatorPrecedence::SUM,
+            lexer::TokenType::SLASH => OperatorPrecedence::PRODUCT,
+            lexer::TokenType::ASTERISK => OperatorPrecedence::PRODUCT,
+            _=> OperatorPrecedence::LOWEST
+        }
+    }
+
+    fn peek_precedence(&self) -> OperatorPrecedence {
+        Parser::get_precedence(self.peek_token.token_type)
+    }
+
+    fn cur_precedence(&self) -> OperatorPrecedence {
+        Parser::get_precedence(self.cur_token.token_type)
     }
 
 }
@@ -410,6 +465,27 @@ mod tests {
                 }              
             },
             _ => assert!(false, "wrong statement type")
+        }
+    }
+    #[test]
+    fn test_parse_infix_expression() {
+        let expressions = vec![
+           ("5 + 5;", 5, "+", 5),
+           ("5 - 5;", 5, "-", 5),
+           ("5 * 5;", 5, "*", 5),
+           ("5 / 5;", 5, "/", 5),
+           ("5 > 5;", 5, ">", 5),
+           ("5 < 5;", 5, "<", 5),
+           ("5 == 5;", 5, "==", 5),
+           ("5 != 5;", 5, "!=", 5)
+        ];
+
+        for expression in expressions {
+            let lexer = lexer::Lexer::new(&expression.0);
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse();
+            check_parse_errors(parser);
+            assert_eq!(program.statements.len(), 1);
         }
     }
 }
