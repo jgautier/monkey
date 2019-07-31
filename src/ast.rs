@@ -486,6 +486,35 @@ mod tests {
             let program = parser.parse();
             check_parse_errors(parser);
             assert_eq!(program.statements.len(), 1);
+            match &program.statements[0] {
+                StatementType::Expression(stmt) => {
+                    match &stmt.expr {
+                        Expression::Infix(expr) => {
+                            assert_eq!(expr.operator, expression.2);
+                            match *expr.left {
+                                Expression::IntegerLiteral(i) => {
+                                    assert_eq!(i.value, expression.1)
+                                },
+                                _ => {
+                                    assert!(false, "wrong expression type")
+                                }   
+                            }
+                            match *expr.right {
+                                Expression::IntegerLiteral(i) => {
+                                    assert_eq!(i.value, expression.3)
+                                },
+                                _ => {
+                                    assert!(false, "wrong expression type")
+                                }   
+                            }
+                        }
+                        _ => {
+                            assert!(false, "wrong expression type")
+                        }
+                    }              
+                },
+                _ => assert!(false, "wrong statement type")
+            }
         }
     }
 }
