@@ -43,7 +43,7 @@ impl fmt::Display for TokenType {
         write!(f, "{:?}", self)
     }
 }
-#[derive(Copy,Clone)]
+#[derive(Copy,Clone,PartialEq,Debug)]
 pub struct Token<'a> {
     pub token_type: TokenType,
     pub literal: &'a str
@@ -142,8 +142,12 @@ impl<'a> Iterator for Lexer<'a> {
     type Item = Token<'a>;
     
     fn next(&mut self) -> Option<Token<'a>> {
+        if self.cur_index > self.input.len() {
+            return None
+        }
         self.skip_whitespace();
-        if self.cur_index + 1 > self.input.len() {
+        if self.cur_index == self.input.len() {
+            self.cur_index += 1;
             return Some(Token {
                 token_type: TokenType::EOF,
                 literal: "EOF"
@@ -169,37 +173,24 @@ impl<'a> Iterator for Lexer<'a> {
                 // convert this to a chr so we can use the is_* methods
                 let chr = chr.chars().next().unwrap();
                 if chr.is_alphabetic() || chr == '_' {
-                    let next_whitepace_index = self.input[self.cur_index..].chars().position(|chr| !chr.is_alphabetic());
-                    match next_whitepace_index {
-                        Some(num) => {
-                            self.cur_index += num;
-                            Token::from_identifier(&self.input[self.cur_index - num..self.cur_index])
-                        },
-                        _ => {
-                            Some(Token {
-                                token_type: TokenType::ILLEGAL,
-                                literal: ""
-                            })
-                        }
-                    }
-
+                    let next_index = match self.input[self.cur_index..].chars().position(|chr| !chr.is_alphabetic()) {
+                        Some(num) => num,
+                        _ => self.input.len() - self.cur_index
+                    };
+                    let token = Token::from_identifier(&self.input[self.cur_index..self.cur_index + next_index]);
+                    self.cur_index += next_index;
+                    token
                 } else if chr.is_numeric() {
-                    let next_whitepace_index = self.input[self.cur_index..].chars().position(|chr| !chr.is_numeric());
-                    match next_whitepace_index {
-                        Some(num) => {
-                            self.cur_index += num;
-                            Some(Token {
-                                token_type: TokenType::INT,
-                                literal: &self.input[self.cur_index - num..self.cur_index]
-                            })
-                        },
-                        _ => {
-                            Some(Token {
-                                token_type: TokenType::ILLEGAL,
-                                literal: ""
-                            })
-                        }
-                    }
+                     let next_index = match self.input[self.cur_index..].chars().position(|chr| !chr.is_numeric()) {
+                        Some(num) => num,
+                        _ => self.input.len() - self.cur_index
+                    };
+                    let token = Some(Token {
+                        token_type: TokenType::INT,
+                        literal: &self.input[self.cur_index..self.cur_index + next_index]
+                    });
+                    self.cur_index += next_index;
+                    token
                 } else {
                     Some(Token {
                         token_type: TokenType::ILLEGAL,
@@ -345,5 +336,17 @@ mod tests {
         assert_eq!("9", nine_number.literal);
         assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
         assert_eq!(TokenType::EOF, lexer.next().unwrap().token_type);
+        assert_eq!(None, lexer.next());
+    }
+    #[test]
+    fn test_expression() {
+        let string = "-a * b";
+        let mut lexer = Lexer::new(&string);
+        assert_eq!(TokenType::MINUS, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::IDENT, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::ASTERISK, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::IDENT, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::EOF, lexer.next().unwrap().token_type);
+        assert_eq!(None, lexer.next())
     }
 }

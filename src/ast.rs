@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use crate::lexer;
 
 trait Node<'a> {
@@ -14,7 +13,11 @@ enum StatementType<'a> {
 
 impl<'a> Node<'a> for StatementType<'a> {
     fn to_string(self) -> String {
-        "hello".to_string()
+        match self {
+            StatementType::Let(stmt) => stmt.to_string(),
+            StatementType::Return(stmt) => stmt.to_string(),
+            StatementType::Expression(stmt) => stmt.to_string()
+        }
     }
 }
 
@@ -70,6 +73,11 @@ struct ExpressionStatement<'a> {
     token: lexer::Token<'a>,
     expr: Expression<'a>
 }
+impl<'a> Node<'a> for ExpressionStatement<'a> {
+    fn to_string(self) -> String {
+        format!("{}", self.expr.to_string())
+    }
+}
 
 #[derive(Clone, Copy)]
 struct IntegerLiteral<'a> {
@@ -106,7 +114,7 @@ struct Infix<'a> {
 
 impl<'a> Node<'a> for Infix<'a> {
     fn to_string(self) -> String {
-        format!("({}{}{})", self.left.to_string(), self.operator, self.right.to_string())
+        format!("({} {} {})", self.left.to_string(), self.operator, self.right.to_string())
     }
 }
 
@@ -120,7 +128,12 @@ enum Expression<'a> {
 
 impl<'a> Node<'a> for Expression<'a> {
     fn to_string(self) -> String {
-        self.to_string()
+        match self {
+            Expression::Identifier(ident) => ident.to_string(),
+            Expression::IntegerLiteral(int) => int.to_string(),
+            Expression::Prefix(pre) => pre.to_string(),
+            Expression::Infix(inf) => inf.to_string()
+        }
     }
 }
 
@@ -170,7 +183,9 @@ impl<'a> Parser<'a> {
             let statement = self.parse_statement();
             match statement {
                 Some(statement) => program.statements.push(statement),
-                _ => {}// do nothing
+                _ => {
+                    //println!("do nothing {:?}", self.cur_token.token_type);
+                }// do nothing
             };
             self.next_token();
         }
@@ -225,9 +240,6 @@ impl<'a> Parser<'a> {
             token: self.cur_token,
             expr: expression
         };
-        if (self.peek_token.token_type == lexer::TokenType::SEMICOLON) {
-            self.next_token();
-        }
         Some(StatementType::Expression(expression_stmt))
     }
 
@@ -243,12 +255,12 @@ impl<'a> Parser<'a> {
             self.next_token();
             left = self.parse_infix_expression(left)?;
         } 
-
         Some(left)
     }
 
     fn parse_identifier_expression(&mut self) -> Expression<'a> {
-        Expression::Identifier(Identifier{ token: self.cur_token })
+        let expr = Expression::Identifier(Identifier{ token: self.cur_token });
+        expr
     }
 
     fn parse_integer_literal_expression(&mut self) -> Option<Expression<'a>> {
@@ -268,7 +280,9 @@ impl<'a> Parser<'a> {
         let token = self.cur_token;
         self.next_token();
         match self.parse_expression(OperatorPrecedence::PREFIX) {
-            Some(expr) => Some(Expression::Prefix(Prefix{ token: token, operator: operator, right: Box::new(expr) })),
+            Some(expr) => {
+                Some(Expression::Prefix(Prefix{ token: token, operator: operator, right: Box::new(expr) }))
+            },
             None => None
         }
     }
@@ -515,6 +529,58 @@ mod tests {
                 },
                 _ => assert!(false, "wrong statement type")
             }
+        }
+    }
+
+    #[test]
+    fn test_operator_precedence() {
+        let test_strings = vec![(
+            "-a * b",
+            "((-a) * b)",
+        ),(
+            "!-a",
+            "(!(-a))"
+        ),(
+            "a + b + c",
+            "((a + b) + c)"
+        ),(
+            "a + b - c",
+            "((a + b) - c)"
+        ),(
+            "a * b * c",
+            "((a * b) * c)",
+        ),(
+            "a * b / c",
+            "((a * b) / c)",
+        ),(
+            "a + b / c",
+            "(a + (b / c))",
+        ),(
+            "a + b * c + d / e - f",
+            "(((a + (b * c)) + (d / e)) - f)",
+        ),(
+            "3 + 4; -5 * 5",
+            "(3 + 4)((-5) * 5)"
+        ),(
+            "5 > 4 == 3 < 4",
+            "((5 > 4) == (3 < 4))",
+        ),(
+            "5 < 4 != 3 > 4",
+            "((5 < 4) != (3 > 4))"
+        ),(
+            "3 + 4; -5 * 5",
+            "(3 + 4)((-5) * 5)",
+        ),(
+            "3 + 4 * 5 == 3 * 1 + 4 * 5",
+            "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"
+        )];
+
+        for test in test_strings {
+            let lexer = lexer::Lexer::new(&test.0);
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse();
+            check_parse_errors(parser);
+            assert_eq!(&test.1, &program.to_string())
         }
     }
 }
