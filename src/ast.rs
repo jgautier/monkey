@@ -1,5 +1,5 @@
 use crate::lexer;
-
+use std::collections::HashSet;
 trait Node<'a> {
     fn to_string(self) -> String;
 }
@@ -32,7 +32,7 @@ impl<'a> Node<'a> for Program<'a> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct Identifier<'a> {
     token: lexer::Token<'a>
 }
@@ -68,7 +68,7 @@ impl<'a> Node<'a> for ReturnStatement<'a> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct ExpressionStatement<'a> {
     token: lexer::Token<'a>,
     expr: Expression<'a>
@@ -79,7 +79,7 @@ impl<'a> Node<'a> for ExpressionStatement<'a> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct IntegerLiteral<'a> {
     token: lexer::Token<'a>,
     value: i64
@@ -91,7 +91,7 @@ impl<'a> Node<'a> for IntegerLiteral<'a> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Prefix<'a> {
     token: lexer::Token<'a>,
     operator: &'a str,
@@ -104,7 +104,7 @@ impl<'a> Node<'a> for Prefix<'a> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Infix<'a> {
     token: lexer::Token<'a>,
     operator: &'a str,
@@ -118,12 +118,23 @@ impl<'a> Node<'a> for Infix<'a> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy, Debug)]
+struct Boolean<'a> {
+    token: lexer::Token<'a>,
+    value: bool
+}
+impl<'a> Node<'a> for Boolean<'a> {
+    fn to_string(self) -> String {
+        format!("{}", self.value)
+    }
+}
+#[derive(Clone, Debug)]
 enum Expression<'a> {
     Identifier(Identifier<'a>),
     IntegerLiteral(IntegerLiteral<'a>),
     Prefix(Prefix<'a>),
-    Infix(Infix<'a>)
+    Infix(Infix<'a>),
+    Boolean(Boolean<'a>)
 }
 
 impl<'a> Node<'a> for Expression<'a> {
@@ -132,12 +143,13 @@ impl<'a> Node<'a> for Expression<'a> {
             Expression::Identifier(ident) => ident.to_string(),
             Expression::IntegerLiteral(int) => int.to_string(),
             Expression::Prefix(pre) => pre.to_string(),
-            Expression::Infix(inf) => inf.to_string()
+            Expression::Infix(inf) => inf.to_string(),
+            Expression::Boolean(boolean) => boolean.to_string()
         }
     }
 }
 
-#[derive(PartialOrd, PartialEq)]
+#[derive(PartialOrd, PartialEq, Debug)]
 enum OperatorPrecedence {
     LOWEST,
     EQUALS,
@@ -152,17 +164,29 @@ struct Parser<'a> {
     lexer: lexer::Lexer<'a>,
     cur_token: lexer::Token<'a>,
     peek_token: lexer::Token<'a>,
+    infix_operators: HashSet<&'a lexer::TokenType>,
     errors: Vec<String>
 }
 
 impl<'a> Parser<'a> {
     pub fn new(mut lexer: lexer::Lexer<'a>) -> Self {
+        let infix_operators: HashSet<&lexer::TokenType> = [
+            lexer::TokenType::PLUS,
+            lexer::TokenType::MINUS,
+            lexer::TokenType::SLASH,
+            lexer::TokenType::ASTERISK,
+            lexer::TokenType::EQ,
+            lexer::TokenType::NEQ,
+            lexer::TokenType::LT,
+            lexer::TokenType::GT
+        ].iter().collect(); 
         let cur_token = lexer.next().unwrap();
         let peek_token = lexer.next().unwrap();
         Self {
             lexer: lexer,
             cur_token: cur_token,
             peek_token: peek_token,
+            infix_operators: infix_operators,
             errors: Vec::<String>::new(),
         }
     }
@@ -248,19 +272,40 @@ impl<'a> Parser<'a> {
             lexer::TokenType::IDENT => self.parse_identifier_expression(),
             lexer::TokenType::INT => self.parse_integer_literal_expression()?,
             lexer::TokenType::BANG | lexer::TokenType::MINUS => self.parse_prefix_expression()?,
+            lexer::TokenType::TRUE | lexer::TokenType::FALSE => self.parse_boolean_expression(),
+            lexer::TokenType::LPAREN => self.parse_grouped_expression()?,
             _=> return None
         };
 
         while self.peek_token.token_type != lexer::TokenType::SEMICOLON && precedence < self.peek_precedence() {
-            self.next_token();
+            if !self.peek_token_is_infix() {
+                return Some(left);
+            }
+            self.next_token();            
             left = self.parse_infix_expression(left)?;
         } 
         Some(left)
     }
 
-    fn parse_identifier_expression(&mut self) -> Expression<'a> {
-        let expr = Expression::Identifier(Identifier{ token: self.cur_token });
+    fn peek_token_is_infix(&self) -> bool {
+        self.infix_operators.contains(&self.peek_token.token_type)
+    }
+
+    fn parse_grouped_expression(&mut self) -> Option<Expression<'a>> {
+        self.next_token();
+        let expr = self.parse_expression(OperatorPrecedence::LOWEST);
+        if !self.expect_peek(lexer::TokenType::RPAREN) {
+            return None;
+        }
         expr
+    }
+
+    fn parse_boolean_expression(&mut self) -> Expression<'a> {
+        Expression::Boolean(Boolean{ token: self.cur_token, value: self.cur_token.token_type == lexer::TokenType::TRUE})
+    }
+
+    fn parse_identifier_expression(&mut self) -> Expression<'a> {
+        Expression::Identifier(Identifier{ token: self.cur_token })
     }
 
     fn parse_integer_literal_expression(&mut self) -> Option<Expression<'a>> {
@@ -532,9 +577,57 @@ mod tests {
         }
     }
 
+     fn test_parse_infix_bool_expression() {
+        let expressions = vec![
+           ("true == true", true, "==", true),
+           ("true != false", true, "!=", false),
+           ("false == false", false, "==", false)
+        ];
+
+        for expression in expressions {
+            let lexer = lexer::Lexer::new(&expression.0);
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse();
+            check_parse_errors(parser);
+            assert_eq!(program.statements.len(), 1);
+            match &program.statements[0] {
+                StatementType::Expression(stmt) => {
+                    match &stmt.expr {
+                        Expression::Infix(expr) => {
+                            assert_eq!(expr.operator, expression.2);
+                            match *expr.left {
+                                Expression::Boolean(i) => {
+                                    assert_eq!(i.value, expression.1)
+                                },
+                                _ => {
+                                    assert!(false, "wrong expression type")
+                                }   
+                            }
+                            match *expr.right {
+                                Expression::Boolean(i) => {
+                                    assert_eq!(i.value, expression.3)
+                                },
+                                _ => {
+                                    assert!(false, "wrong expression type")
+                                }   
+                            }
+                        }
+                        _ => {
+                            assert!(false, "wrong expression type")
+                        }
+                    }              
+                },
+                _ => assert!(false, "wrong statement type")
+            }
+        }
+    }
+
     #[test]
     fn test_operator_precedence() {
         let test_strings = vec![(
+            "1 + (2 + 3) + 4",
+            "((1 + (2 + 3)) + 4)",
+        ),(
             "-a * b",
             "((-a) * b)",
         ),(
@@ -573,6 +666,30 @@ mod tests {
         ),(
             "3 + 4 * 5 == 3 * 1 + 4 * 5",
             "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"
+        ), (
+            "true",
+            "true", 
+        ), (
+            "false",
+            "false",
+        ), (
+            "3 > 5 == false",
+            "((3 > 5) == false)"
+        ), (
+            "3 < 5 == true",
+            "((3 < 5) == true)"
+        ), (
+            "(5 + 5) * 2",
+            "((5 + 5) * 2)",
+        ), (
+            "2 / (5 + 5)",
+            "(2 / (5 + 5))",
+        ), (
+            "-(5 + 5)",
+            "(-(5 + 5))",
+        ), (
+            "!(true == true)",
+            "(!(true == true))",
         )];
 
         for test in test_strings {
@@ -580,7 +697,7 @@ mod tests {
             let mut parser = Parser::new(lexer);
             let program = parser.parse();
             check_parse_errors(parser);
-            assert_eq!(&test.1, &program.to_string())
+            assert_eq!(&test.1, &program.to_string());
         }
     }
 }
