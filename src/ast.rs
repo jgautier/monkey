@@ -4,7 +4,7 @@ trait Node<'a> {
     fn to_string(self) -> String;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum StatementType<'a> {
     Let(LetStatement<'a>),
     Return(ReturnStatement<'a>),
@@ -43,7 +43,7 @@ impl<'a> Node<'a> for Identifier<'a> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct LetStatement<'a> {
     token: lexer::Token<'a>,
     name: Identifier<'a>,
@@ -56,7 +56,7 @@ impl<'a> Node<'a> for LetStatement<'a> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct ReturnStatement<'a> {
     token: lexer::Token<'a>,
     //value: Expression<'a> 
@@ -129,12 +129,49 @@ impl<'a> Node<'a> for Boolean<'a> {
     }
 }
 #[derive(Clone, Debug)]
+struct BlockStatement<'a> {
+    token: lexer::Token<'a>,
+    statements: Vec<StatementType<'a>>
+}
+impl<'a> Node<'a> for BlockStatement<'a> {
+    fn to_string(self) -> String {
+        let statement_strs = self.statements.iter().map(|node| node.clone().to_string()).collect::<Vec<String>>();
+        format!("{{ {} }}", statement_strs.concat())
+    }
+}
+
+#[derive(Clone, Debug)]
+struct If<'a> {
+    token: lexer::Token<'a>,
+    condition: Box<Expression<'a>>,
+    consequence: BlockStatement<'a>,
+    alternative: Option<BlockStatement<'a>>
+}
+
+impl<'a> Node<'a> for If<'a> {
+    fn to_string(self) -> String {
+        let mut strs = Vec::<String>::new();
+        strs.push("if ".to_string());
+        strs.push(self.condition.to_string());
+        strs.push(" ".to_string());
+        strs.push(self.consequence.to_string());
+        if let Some(alternative) = self.alternative {
+            strs.push(" else ".to_string());
+            strs.push(alternative.to_string());
+        };
+        strs.push(";".to_string());
+        strs.concat()
+    }
+}
+
+#[derive(Clone, Debug)]
 enum Expression<'a> {
     Identifier(Identifier<'a>),
     IntegerLiteral(IntegerLiteral<'a>),
     Prefix(Prefix<'a>),
     Infix(Infix<'a>),
-    Boolean(Boolean<'a>)
+    Boolean(Boolean<'a>),
+    If(If<'a>)
 }
 
 impl<'a> Node<'a> for Expression<'a> {
@@ -144,7 +181,8 @@ impl<'a> Node<'a> for Expression<'a> {
             Expression::IntegerLiteral(int) => int.to_string(),
             Expression::Prefix(pre) => pre.to_string(),
             Expression::Infix(inf) => inf.to_string(),
-            Expression::Boolean(boolean) => boolean.to_string()
+            Expression::Boolean(boolean) => boolean.to_string(),
+            Expression::If(if_expr) => if_expr.to_string()
         }
     }
 }
@@ -274,6 +312,7 @@ impl<'a> Parser<'a> {
             lexer::TokenType::BANG | lexer::TokenType::MINUS => self.parse_prefix_expression()?,
             lexer::TokenType::TRUE | lexer::TokenType::FALSE => self.parse_boolean_expression(),
             lexer::TokenType::LPAREN => self.parse_grouped_expression()?,
+            lexer::TokenType::IF => self.parse_if_expression()?,
             _=> return None
         };
 
@@ -289,6 +328,46 @@ impl<'a> Parser<'a> {
 
     fn peek_token_is_infix(&self) -> bool {
         self.infix_operators.contains(&self.peek_token.token_type)
+    }
+
+    fn parse_if_expression(&mut self) -> Option<Expression<'a>> {
+        let token = self.cur_token;
+        if !self.expect_peek(lexer::TokenType::LPAREN) {
+            return None;
+        }
+
+        self.next_token();
+        let condition = self.parse_expression(OperatorPrecedence::LOWEST)?;
+        if !self.expect_peek(lexer::TokenType::RPAREN) {
+            return None;
+        }
+        if !self.expect_peek(lexer::TokenType::LBRACE) {
+            return None;
+        }
+        let consequence = self.parse_block_statement()?;
+        let alternative = if self.peek_token.token_type == lexer::TokenType::ELSE {
+            self.next_token();
+            if !self.expect_peek(lexer::TokenType::LBRACE) {
+                return None;
+            } else {
+                let statement = self.parse_block_statement()?;
+                Some(statement)
+            }
+        } else {
+            None
+        };
+        Some(Expression::If(If { token: token, condition: Box::new(condition), consequence: consequence, alternative: alternative }))
+    }
+
+    fn parse_block_statement(&mut self) -> Option<BlockStatement<'a>> {
+        let mut block_statement = BlockStatement { token: self.cur_token, statements: Vec::new() };
+        self.next_token();
+        while self.cur_token.token_type != lexer::TokenType::RBRACE && self.cur_token.token_type != lexer::TokenType::EOF {
+            let statement = self.parse_statement()?;
+            block_statement.statements.push(statement);
+            self.next_token();
+        }
+        Some(block_statement)
     }
 
     fn parse_grouped_expression(&mut self) -> Option<Expression<'a>> {
@@ -699,5 +778,14 @@ mod tests {
             check_parse_errors(parser);
             assert_eq!(&test.1, &program.to_string());
         }
+    }
+    #[test]
+    fn test_parse_if_expression() {
+        let if_str = "if (x > y) { x } else { y };";
+        let lexer = lexer::Lexer::new(&if_str);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parse_errors(parser);
+        assert_eq!(if_str, &program.to_string());
     }
 }
