@@ -173,8 +173,11 @@ struct Fn<'a> {
 
 impl<'a> Node<'a> for Fn<'a> {
     fn to_string(self) -> String {
-        let mut strs = vec!["fn (".to_string()];
-        strs.push(self.params.iter().map(|param| param.to_string()).collect::<Vec<String>>.join(", "));
+        let mut strs = vec!["fn(".to_string()];
+        strs.push(self.params.iter().map(|param| param.to_string()).collect::<Vec<String>>().join(", "));
+        strs.push((") ").to_string());
+        strs.push(self.body.to_string());
+        strs.concat()
     }
 }
 
@@ -329,6 +332,7 @@ impl<'a> Parser<'a> {
             lexer::TokenType::TRUE | lexer::TokenType::FALSE => self.parse_boolean_expression(),
             lexer::TokenType::LPAREN => self.parse_grouped_expression()?,
             lexer::TokenType::IF => self.parse_if_expression()?,
+            lexer::TokenType::FUNCTION => self.parse_fn_expression()?,
             _=> return None
         };
 
@@ -344,6 +348,47 @@ impl<'a> Parser<'a> {
 
     fn peek_token_is_infix(&self) -> bool {
         self.infix_operators.contains(&self.peek_token.token_type)
+    }
+
+    fn parse_fn_parameters(&mut self) -> Vec<Identifier<'a>> {
+        let mut identifiers = Vec::new();
+        if self.peek_token.token_type == lexer::TokenType::RPAREN {
+            self.next_token();
+            return identifiers;
+        }
+
+        self.next_token();
+
+        identifiers.push(Identifier{ token: self.cur_token });
+
+        while self.peek_token.token_type == lexer::TokenType::COMMA {
+            self.next_token();
+            self.next_token();
+            identifiers.push(Identifier{ token: self.cur_token });
+        }
+
+        if !self.expect_peek(lexer::TokenType::RPAREN) {
+            return identifiers;
+        }
+
+        identifiers
+    }
+
+    fn parse_fn_expression(&mut self) -> Option<Expression<'a>> {
+        let token = self.cur_token;
+        if !self.expect_peek(lexer::TokenType::LPAREN) {
+            return None;
+        }
+
+        let params = self.parse_fn_parameters();
+
+        if !self.expect_peek(lexer::TokenType::LBRACE) {
+            return None;
+        }
+
+        let body = self.parse_block_statement()?;
+
+        Some(Expression::Fn(Fn{ token: token, params: params, body: Box::new(body) }))
     }
 
     fn parse_if_expression(&mut self) -> Option<Expression<'a>> {
@@ -803,5 +848,14 @@ mod tests {
         let program = parser.parse();
         check_parse_errors(parser);
         assert_eq!(if_str, &program.to_string());
+    }
+     #[test]
+    fn test_parse_fn_expression() {
+        let fn_str = "fn(x, y, z) {  }";
+        let lexer = lexer::Lexer::new(&fn_str);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parse_errors(parser);
+        assert_eq!(fn_str, &program.to_string());
     }
 }
