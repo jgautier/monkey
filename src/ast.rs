@@ -165,13 +165,28 @@ impl<'a> Node<'a> for If<'a> {
 }
 
 #[derive(Clone, Debug)]
+struct Fn<'a> {
+    token: lexer::Token<'a>,
+    params: Vec<Identifier<'a>>,
+    body: Box<BlockStatement<'a>>
+}
+
+impl<'a> Node<'a> for Fn<'a> {
+    fn to_string(self) -> String {
+        let mut strs = vec!["fn (".to_string()];
+        strs.push(self.params.iter().map(|param| param.to_string()).collect::<Vec<String>>.join(", "));
+    }
+}
+
+#[derive(Clone, Debug)]
 enum Expression<'a> {
     Identifier(Identifier<'a>),
     IntegerLiteral(IntegerLiteral<'a>),
     Prefix(Prefix<'a>),
     Infix(Infix<'a>),
     Boolean(Boolean<'a>),
-    If(If<'a>)
+    If(If<'a>),
+    Fn(Fn<'a>)
 }
 
 impl<'a> Node<'a> for Expression<'a> {
@@ -182,7 +197,8 @@ impl<'a> Node<'a> for Expression<'a> {
             Expression::Prefix(pre) => pre.to_string(),
             Expression::Infix(inf) => inf.to_string(),
             Expression::Boolean(boolean) => boolean.to_string(),
-            Expression::If(if_expr) => if_expr.to_string()
+            Expression::If(if_expr) => if_expr.to_string(),
+            Expression::Fn(fn_expr) => fn_expr.to_string()
         }
     }
 }
