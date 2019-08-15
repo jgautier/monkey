@@ -1,7 +1,7 @@
 use crate::lexer;
 use std::collections::HashSet;
 trait Node<'a> {
-    fn to_string(self) -> String;
+    fn to_string(&self) -> String;
 }
 
 #[derive(Clone, Debug)]
@@ -12,7 +12,7 @@ enum StatementType<'a> {
 }
 
 impl<'a> Node<'a> for StatementType<'a> {
-    fn to_string(self) -> String {
+    fn to_string(&self) -> String {
         match self {
             StatementType::Let(stmt) => stmt.to_string(),
             StatementType::Return(stmt) => stmt.to_string(),
@@ -26,7 +26,7 @@ struct Program<'a> {
 }
 
 impl<'a> Node<'a> for Program<'a> {
-    fn to_string(self) -> String {
+    fn to_string(&self) -> String {
         let statement_strs = self.statements.iter().map(|node| node.clone().to_string()).collect::<Vec<String>>();
         statement_strs.concat()
     }
@@ -38,7 +38,7 @@ struct Identifier<'a> {
 }
 
 impl<'a> Node<'a> for Identifier<'a> {
-    fn to_string(self) -> String {
+    fn to_string(&self) -> String {
         format!("{}", self.token.literal)
     }
 }
@@ -51,7 +51,7 @@ struct LetStatement<'a> {
 }
 
 impl<'a> Node<'a> for LetStatement<'a> {
-    fn to_string(self) -> String {
+    fn to_string(&self) -> String {
         format!("let {} = {};\n", self.name.token.literal, "expression here").to_string()
     }
 }
@@ -63,7 +63,7 @@ struct ReturnStatement<'a> {
 }
 
 impl<'a> Node<'a> for ReturnStatement<'a> {
-    fn to_string(self) -> String {
+    fn to_string(&self) -> String {
         format!("return {};\n", "expression here").to_string()
     }
 }
@@ -74,7 +74,7 @@ struct ExpressionStatement<'a> {
     expr: Expression<'a>
 }
 impl<'a> Node<'a> for ExpressionStatement<'a> {
-    fn to_string(self) -> String {
+    fn to_string(&self) -> String {
         format!("{}", self.expr.to_string())
     }
 }
@@ -86,7 +86,7 @@ struct IntegerLiteral<'a> {
 }
 
 impl<'a> Node<'a> for IntegerLiteral<'a> {
-    fn to_string(self) -> String {
+    fn to_string(&self) -> String {
         format!("{}", self.value)
     }
 }
@@ -99,7 +99,7 @@ struct Prefix<'a> {
 }
 
 impl<'a> Node<'a> for Prefix<'a> {
-    fn to_string(self) -> String {
+    fn to_string(&self) -> String {
         format!("({}{})", self.operator, self.right.to_string())
     }
 }
@@ -113,7 +113,7 @@ struct Infix<'a> {
 }
 
 impl<'a> Node<'a> for Infix<'a> {
-    fn to_string(self) -> String {
+    fn to_string(&self) -> String {
         format!("({} {} {})", self.left.to_string(), self.operator, self.right.to_string())
     }
 }
@@ -124,7 +124,7 @@ struct Boolean<'a> {
     value: bool
 }
 impl<'a> Node<'a> for Boolean<'a> {
-    fn to_string(self) -> String {
+    fn to_string(&self) -> String {
         format!("{}", self.value)
     }
 }
@@ -134,7 +134,7 @@ struct BlockStatement<'a> {
     statements: Vec<StatementType<'a>>
 }
 impl<'a> Node<'a> for BlockStatement<'a> {
-    fn to_string(self) -> String {
+    fn to_string(&self) -> String {
         let statement_strs = self.statements.iter().map(|node| node.clone().to_string()).collect::<Vec<String>>();
         format!("{{ {} }}", statement_strs.concat())
     }
@@ -149,13 +149,13 @@ struct If<'a> {
 }
 
 impl<'a> Node<'a> for If<'a> {
-    fn to_string(self) -> String {
+    fn to_string(&self) -> String {
         let mut strs = Vec::<String>::new();
         strs.push("if ".to_string());
         strs.push(self.condition.to_string());
         strs.push(" ".to_string());
         strs.push(self.consequence.to_string());
-        if let Some(alternative) = self.alternative {
+        if let Some(alternative) = &self.alternative {
             strs.push(" else ".to_string());
             strs.push(alternative.to_string());
         };
@@ -172,11 +172,28 @@ struct Fn<'a> {
 }
 
 impl<'a> Node<'a> for Fn<'a> {
-    fn to_string(self) -> String {
+    fn to_string(&self) -> String {
         let mut strs = vec!["fn(".to_string()];
         strs.push(self.params.iter().map(|param| param.to_string()).collect::<Vec<String>>().join(", "));
         strs.push((") ").to_string());
         strs.push(self.body.to_string());
+        strs.concat()
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Call<'a> {
+    token: lexer::Token<'a>,
+    function: Box<Expression<'a>>,
+    args: Vec<Expression<'a>>
+}
+
+impl<'a> Node<'a> for Call<'a> {
+    fn to_string(&self) -> String {
+        let mut strs = vec![self.function.to_string()];
+        strs.push("(".to_string());
+        strs.push(self.args.iter().map(|arg| arg.to_string()).collect::<Vec<String>>().join(", "));
+        strs.push((")").to_string());
         strs.concat()
     }
 }
@@ -189,11 +206,12 @@ enum Expression<'a> {
     Infix(Infix<'a>),
     Boolean(Boolean<'a>),
     If(If<'a>),
-    Fn(Fn<'a>)
+    Fn(Fn<'a>),
+    Call(Call<'a>)
 }
 
 impl<'a> Node<'a> for Expression<'a> {
-    fn to_string(self) -> String {
+    fn to_string(&self) -> String {
         match self {
             Expression::Identifier(ident) => ident.to_string(),
             Expression::IntegerLiteral(int) => int.to_string(),
@@ -201,7 +219,8 @@ impl<'a> Node<'a> for Expression<'a> {
             Expression::Infix(inf) => inf.to_string(),
             Expression::Boolean(boolean) => boolean.to_string(),
             Expression::If(if_expr) => if_expr.to_string(),
-            Expression::Fn(fn_expr) => fn_expr.to_string()
+            Expression::Fn(fn_expr) => fn_expr.to_string(),
+            Expression::Call(call_expr) => call_expr.to_string()
         }
     }
 }
@@ -235,7 +254,8 @@ impl<'a> Parser<'a> {
             lexer::TokenType::EQ,
             lexer::TokenType::NEQ,
             lexer::TokenType::LT,
-            lexer::TokenType::GT
+            lexer::TokenType::GT,
+            lexer::TokenType::LPAREN
         ].iter().collect(); 
         let cur_token = lexer.next().unwrap();
         let peek_token = lexer.next().unwrap();
@@ -472,7 +492,37 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_call_arguments(&mut self) -> Vec<Expression<'a>> {
+        let mut args = Vec::new();
+        if self.peek_token.token_type == lexer::TokenType::RPAREN {
+            self.next_token();
+            return args;
+        }
+
+        self.next_token();
+        args.push(self.parse_expression(OperatorPrecedence::LOWEST).unwrap());
+
+        while (self.peek_token.token_type == lexer::TokenType::COMMA) {
+            self.next_token();
+            self.next_token();
+            args.push(self.parse_expression(OperatorPrecedence::LOWEST).unwrap());
+        }
+
+        if !self.expect_peek(lexer::TokenType::RPAREN) {
+            return args;
+        }
+
+        return args;
+    }
+
+    fn parse_call_expression(&mut self, function: Expression<'a>) -> Option<Expression<'a>> {
+        Some(Expression::Call(Call { token: self.cur_token, function: Box::new(function), args: self.parse_call_arguments() }))
+    }
+
     fn parse_infix_expression(&mut self, left: Expression<'a>) -> Option<Expression<'a>> {
+        if self.cur_token.token_type == lexer::TokenType::LPAREN {
+            return self.parse_call_expression(left);
+        }
         let operator = self.cur_token.literal;
         let token = self.cur_token;
         let precedence = self.cur_precedence();
@@ -502,6 +552,7 @@ impl<'a> Parser<'a> {
             lexer::TokenType::MINUS => OperatorPrecedence::SUM,
             lexer::TokenType::SLASH => OperatorPrecedence::PRODUCT,
             lexer::TokenType::ASTERISK => OperatorPrecedence::PRODUCT,
+            lexer::TokenType::LPAREN => OperatorPrecedence::CALL,
             _=> OperatorPrecedence::LOWEST
         }
     }
@@ -857,5 +908,14 @@ mod tests {
         let program = parser.parse();
         check_parse_errors(parser);
         assert_eq!(fn_str, &program.to_string());
+    }
+    #[test]
+    fn test_parse_call_expression() {
+        let fn_str =  ("a + add(b * c) + d", "((a + add((b * c))) + d)");
+        let lexer = lexer::Lexer::new(&fn_str.0);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parse_errors(parser);
+        assert_eq!(fn_str.1, &program.to_string());
     }
 }
