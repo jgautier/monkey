@@ -43,11 +43,11 @@ impl<'a> Node<'a> for Identifier<'a> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct LetStatement<'a> {
     token: lexer::Token<'a>,
     name: Identifier<'a>,
-    //value: Expression<'a> 
+    value: Box<Expression<'a>> 
 }
 
 impl<'a> Node<'a> for LetStatement<'a> {
@@ -56,10 +56,10 @@ impl<'a> Node<'a> for LetStatement<'a> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct ReturnStatement<'a> {
     token: lexer::Token<'a>,
-    //value: Expression<'a> 
+    value: Box<Expression<'a>> 
 }
 
 impl<'a> Node<'a> for ReturnStatement<'a> {
@@ -293,13 +293,20 @@ impl<'a> Parser<'a> {
         program
     }
     fn parse_return_statement(&mut self) -> Option<StatementType<'a>> {
-        let return_statement = ReturnStatement {
-            token: self.cur_token
-        };
-        while self.cur_token.token_type != lexer::TokenType::SEMICOLON {
-            self.next_token();
-        };
-        Some(StatementType::Return(return_statement))
+        let token = self.cur_token;
+        
+        self.next_token();
+
+        let value = self.parse_expression(OperatorPrecedence::LOWEST).unwrap();
+
+        if !self.expect_peek(lexer::TokenType::SEMICOLON) {
+            return None;
+        }
+
+        Some(StatementType::Return(ReturnStatement{
+            token: token,
+            value: Box::new(value)
+        }))
     }
     fn parse_let_statment(&mut self) -> Option<StatementType<'a>> {
 
@@ -317,13 +324,18 @@ impl<'a> Parser<'a> {
             return None;
         }
 
-        while self.cur_token.token_type != lexer::TokenType::SEMICOLON {
-            self.next_token();
+        self.next_token();
+
+        let value = self.parse_expression(OperatorPrecedence::LOWEST).unwrap();
+
+        if !self.expect_peek(lexer::TokenType::SEMICOLON) {
+            return None;
         }
 
         Some(StatementType::Let(LetStatement {
             token: statement_token,
-            name: identifier
+            name: identifier,
+            value: Box::new(value)
         }))
     }
 
@@ -575,11 +587,14 @@ mod tests {
             println!("Parse Error: {}", msg);
         }
     }
-    fn test_let_statement(statement: &StatementType, name: &str) {
+    fn test_let_statement(statement: &StatementType, name: &str, value: i64) {
         match statement {
             StatementType::Let(statement) => {
                 assert_eq!(statement.token.token_type, lexer::TokenType::LET);
                 assert_eq!(statement.name.token.literal, name);
+                if let Expression::IntegerLiteral(expr) = *statement.value {
+                    assert_eq!(expr.value, value);
+                }
             },
             _ => {
                 assert!(false, "received wrong statement type")
@@ -587,10 +602,13 @@ mod tests {
         }
     }
 
-    fn test_return_statement(statement: &StatementType) {
+    fn test_return_statement(statement: &StatementType, value: i64) {
         match statement {
             StatementType::Return(statement) => {
                 assert_eq!(statement.token.token_type, lexer::TokenType::RETURN);
+                if let Expression::IntegerLiteral(expr) = *statement.value {
+                    assert_eq!(expr.value, value);
+                }
             },
             _ => {
                  assert!(false, "received wrong statement type")
@@ -610,8 +628,9 @@ mod tests {
         let program = parser.parse();
         check_parse_errors(parser);
         let identifiers = vec!["x", "y", "foobar"];
+        let values = vec![5, 10, 838383];
         for i in 0..3 {
-            test_let_statement(&program.statements[i], identifiers[i]);
+            test_let_statement(&program.statements[i], identifiers[i], values[i]);
         }
     }
 
@@ -626,8 +645,9 @@ mod tests {
         let mut parser = Parser::new(lexer);
         let program = parser.parse();
         check_parse_errors(parser);
-        for statement in program.statements {
-            test_return_statement(&statement);
+        let values = vec![5, 10, 993322];
+        for i in 0..3 {
+            test_return_statement(&program.statements[i], values[i]);
         }
     }
     #[test]
@@ -638,7 +658,11 @@ mod tests {
                     token: lexer::Token{ token_type: lexer::TokenType::LET, literal: "let"},
                     name: Identifier {
                         token: lexer::Token { token_type: lexer::TokenType::IDENT, literal: "myVar"}
-                    }
+                    },
+                    value: Box::new(Expression::IntegerLiteral(IntegerLiteral {
+                        token: lexer::Token{ token_type: lexer::TokenType::INT, literal: "5" },
+                        value: 5
+                    }))
                 })
             ]
         };
