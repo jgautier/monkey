@@ -1,5 +1,6 @@
 mod lexer;
 mod ast;
+use ast::Node;
 use std::io;
 use std::io::Write;
 
@@ -15,9 +16,17 @@ fn start() {
         let mut input = String::new();
         match io::stdin().read_line(&mut input) {
             Ok(n) => {
-                let lexer = lexer::Lexer::new(&input);
-                for token in lexer {
-                    println!("{}", token);
+                if n > 1 {
+                    let lexer = lexer::Lexer::new(&input);
+                    let mut parser = ast::Parser::new(lexer);
+                    let mut program = parser.parse();
+                    if parser.errors.len() > 0 {
+                        for error in parser.errors {
+                            println!("{}", error);
+                        }
+                    } else {
+                        println!("{}", program.to_string());
+                    }
                 }
                 print_prompt();
             }

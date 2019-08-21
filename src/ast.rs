@@ -1,6 +1,6 @@
 use crate::lexer;
 use std::collections::HashSet;
-trait Node<'a> {
+pub trait Node<'a> {
     fn to_string(&self) -> String;
 }
 
@@ -21,7 +21,7 @@ impl<'a> Node<'a> for StatementType<'a> {
     }
 }
 
-struct Program<'a> {
+pub struct Program<'a> {
     statements: Vec<StatementType<'a>>
 }
 
@@ -52,7 +52,7 @@ struct LetStatement<'a> {
 
 impl<'a> Node<'a> for LetStatement<'a> {
     fn to_string(&self) -> String {
-        format!("let {} = {};\n", self.name.token.literal, "expression here").to_string()
+        format!("let {} = {};\n", self.name.token.literal, self.value.to_string()).to_string()
     }
 }
 
@@ -64,7 +64,7 @@ struct ReturnStatement<'a> {
 
 impl<'a> Node<'a> for ReturnStatement<'a> {
     fn to_string(&self) -> String {
-        format!("return {};\n", "expression here").to_string()
+        format!("return {};\n", self.value.to_string()).to_string()
     }
 }
 
@@ -236,12 +236,12 @@ enum OperatorPrecedence {
     CALL
 }
 
-struct Parser<'a> {
+pub struct Parser<'a> {
     lexer: lexer::Lexer<'a>,
     cur_token: lexer::Token<'a>,
     peek_token: lexer::Token<'a>,
     infix_operators: HashSet<&'a lexer::TokenType>,
-    errors: Vec<String>
+    pub errors: Vec<String>
 }
 
 impl<'a> Parser<'a> {
@@ -299,8 +299,8 @@ impl<'a> Parser<'a> {
 
         let value = self.parse_expression(OperatorPrecedence::LOWEST).unwrap();
 
-        if !self.expect_peek(lexer::TokenType::SEMICOLON) {
-            return None;
+        if self.peek_token.token_type == lexer::TokenType::SEMICOLON {
+            self.next_token();
         }
 
         Some(StatementType::Return(ReturnStatement{
@@ -328,8 +328,8 @@ impl<'a> Parser<'a> {
 
         let value = self.parse_expression(OperatorPrecedence::LOWEST).unwrap();
 
-        if !self.expect_peek(lexer::TokenType::SEMICOLON) {
-            return None;
+        if self.peek_token.token_type == lexer::TokenType::SEMICOLON {
+            self.next_token();
         }
 
         Some(StatementType::Let(LetStatement {
