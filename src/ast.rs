@@ -5,7 +5,7 @@ pub trait Node<'a> {
 }
 
 #[derive(Clone, Debug)]
-enum StatementType<'a> {
+pub enum StatementType<'a> {
     Let(LetStatement<'a>),
     Return(ReturnStatement<'a>),
     Expression(ExpressionStatement<'a>)
@@ -22,7 +22,7 @@ impl<'a> Node<'a> for StatementType<'a> {
 }
 
 pub struct Program<'a> {
-    statements: Vec<StatementType<'a>>
+    pub statements: Vec<StatementType<'a>>
 }
 
 impl<'a> Node<'a> for Program<'a> {
@@ -69,9 +69,9 @@ impl<'a> Node<'a> for ReturnStatement<'a> {
 }
 
 #[derive(Clone, Debug)]
-struct ExpressionStatement<'a> {
+pub struct ExpressionStatement<'a> {
     token: lexer::Token<'a>,
-    expr: Expression<'a>
+    pub expr: Expression<'a>
 }
 impl<'a> Node<'a> for ExpressionStatement<'a> {
     fn to_string(&self) -> String {
@@ -80,9 +80,9 @@ impl<'a> Node<'a> for ExpressionStatement<'a> {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct IntegerLiteral<'a> {
+pub struct IntegerLiteral<'a> {
     token: lexer::Token<'a>,
-    value: i64
+    pub value: i64
 }
 
 impl<'a> Node<'a> for IntegerLiteral<'a> {
@@ -92,10 +92,10 @@ impl<'a> Node<'a> for IntegerLiteral<'a> {
 }
 
 #[derive(Clone, Debug)]
-struct Prefix<'a> {
+pub struct Prefix<'a> {
     token: lexer::Token<'a>,
-    operator: &'a str,
-    right: Box<Expression<'a>>
+    pub operator: &'a str,
+    pub right: Box<Expression<'a>>
 }
 
 impl<'a> Node<'a> for Prefix<'a> {
@@ -119,9 +119,9 @@ impl<'a> Node<'a> for Infix<'a> {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct Boolean<'a> {
+pub struct Boolean<'a> {
     token: lexer::Token<'a>,
-    value: bool
+    pub value: bool
 }
 impl<'a> Node<'a> for Boolean<'a> {
     fn to_string(&self) -> String {
@@ -199,7 +199,7 @@ impl<'a> Node<'a> for Call<'a> {
 }
 
 #[derive(Clone, Debug)]
-enum Expression<'a> {
+pub enum Expression<'a> {
     Identifier(Identifier<'a>),
     IntegerLiteral(IntegerLiteral<'a>),
     Prefix(Prefix<'a>),

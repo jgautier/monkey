@@ -1,6 +1,8 @@
 mod lexer;
 mod ast;
+mod eval;
 use ast::Node;
+use eval::Object;
 use std::io;
 use std::io::Write;
 
@@ -19,13 +21,14 @@ fn start() {
                 if n > 1 {
                     let lexer = lexer::Lexer::new(&input);
                     let mut parser = ast::Parser::new(lexer);
-                    let mut program = parser.parse();
+                    let program = parser.parse();
                     if parser.errors.len() > 0 {
                         for error in parser.errors {
                             println!("{}", error);
                         }
                     } else {
-                        println!("{}", program.to_string());
+                        let result = eval::eval_program(program);
+                        println!("{}", result.inspect());
                     }
                 }
                 print_prompt();
