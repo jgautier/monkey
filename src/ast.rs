@@ -105,11 +105,11 @@ impl<'a> Node<'a> for Prefix<'a> {
 }
 
 #[derive(Clone, Debug)]
-struct Infix<'a> {
+pub struct Infix<'a> {
     token: lexer::Token<'a>,
-    operator: &'a str,
-    right: Box<Expression<'a>>,
-    left: Box<Expression<'a>>
+    pub operator: &'a str,
+    pub right: Box<Expression<'a>>,
+    pub left: Box<Expression<'a>>
 }
 
 impl<'a> Node<'a> for Infix<'a> {
