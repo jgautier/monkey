@@ -14,6 +14,7 @@ fn print_prompt() {
 }
 
 fn start() {
+    let mut env = eval::Environment::new();
     loop {
         let mut input = String::new();
         match io::stdin().read_line(&mut input) {
@@ -27,8 +28,15 @@ fn start() {
                             println!("{}", error);
                         }
                     } else {
-                        let result = eval::eval_program(program);
-                        println!("{}", result.inspect());
+                        let result = eval::eval_program(program, &mut env);
+                        match result {
+                            eval::ObjectType::Null(_) => {
+
+                            },
+                            _ => {
+                                println!("{}", result.inspect());
+                            }
+                        }
                     }
                 }
                 print_prompt();

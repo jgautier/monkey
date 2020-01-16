@@ -33,8 +33,8 @@ impl<'a> Node<'a> for Program<'a> {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct Identifier<'a> {
-    token: lexer::Token<'a>
+pub struct Identifier<'a> {
+    pub token: lexer::Token<'a>
 }
 
 impl<'a> Node<'a> for Identifier<'a> {
@@ -44,10 +44,10 @@ impl<'a> Node<'a> for Identifier<'a> {
 }
 
 #[derive(Clone, Debug)]
-struct LetStatement<'a> {
+pub struct LetStatement<'a> {
     token: lexer::Token<'a>,
-    name: Identifier<'a>,
-    value: Box<Expression<'a>> 
+    pub name: Identifier<'a>,
+    pub value: Box<Expression<'a>> 
 }
 
 impl<'a> Node<'a> for LetStatement<'a> {
