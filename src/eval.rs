@@ -10,7 +10,8 @@ pub trait Object {
 pub enum ObjectType {
   Integer(Integer),
   Boolean(Boolean),
-  Null(Null)
+  Null(Null),
+  Return(Box<ObjectType>)
 }
 
 impl Object for ObjectType {
@@ -24,6 +25,9 @@ impl Object for ObjectType {
       },
       ObjectType::Null(_) => {
         "NULL".to_string()
+      },
+      ObjectType::Return(_) => {
+        "RETURN".to_string()
       }
     }
   }
@@ -37,6 +41,9 @@ impl Object for ObjectType {
       },
       ObjectType::Null(_) => {
         "null".to_string()
+      },
+      ObjectType::Return(obj) => {
+        obj.inspect()
       }
     }
   }
@@ -64,7 +71,27 @@ struct Null {}
 pub fn eval_program(prog: ast::Program) -> ObjectType {
   let mut result = ObjectType::Null(Null {});
   for stmt in prog.statements {
-    result = eval_statement(stmt)
+    result = eval_statement(stmt);
+    match result {
+      ObjectType::Return(obj) => {
+        return *obj
+      },
+      _=> {}
+    }
+  }
+  result
+}
+
+pub fn eval_block_statements(stmts: Vec<ast::StatementType>) -> ObjectType {
+  let mut result = ObjectType::Null(Null {});
+  for stmt in stmts {
+    result = eval_statement(stmt);
+    match result {
+      ObjectType::Return(_) => {
+        return result
+      },
+      _=> {}
+    }
   }
   result
 }
@@ -158,6 +185,34 @@ fn eval_infix_expression(operator: &str, left: ObjectType, right: ObjectType) ->
     }
   }
 }
+fn is_truthy(val: ObjectType) -> bool {
+  match val {
+    ObjectType::Null(_) => {
+      false
+    },
+    ObjectType::Boolean(b) => {
+      b.value
+    }
+    _=> {
+      true
+    }
+  }
+}
+fn eval_if_expression(if_expr: ast::If) -> ObjectType {
+  let condition = eval_expression(*if_expr.condition);
+  if is_truthy(condition) {
+    eval_block_statements(if_expr.consequence.statements)
+  } else {
+    match if_expr.alternative {
+      Some(block) => {
+        eval_block_statements(block.statements)
+      },
+      _ => {
+        ObjectType::Null(Null {})
+      }
+    }
+  }
+}
 fn eval_expression(expr: ast::Expression) -> ObjectType {
   match expr {
     ast::Expression::Infix(expr) => {
@@ -175,6 +230,9 @@ fn eval_expression(expr: ast::Expression) -> ObjectType {
     ast::Expression::Boolean(boolean) => {
       ObjectType::Boolean(Boolean { value: boolean.value })
     },
+    ast::Expression::If(i) => {
+      eval_if_expression(i)
+    },
     _ => {
       ObjectType::Null(Null {})
     }
@@ -186,6 +244,9 @@ fn eval_statement(node: ast::StatementType) -> ObjectType {
     ast::StatementType::Expression(expr) => {
       eval_expression(expr.expr)
     },
+    ast::StatementType::Return(ret_stmt) => {
+      ObjectType::Return(Box::new(eval_expression(*ret_stmt.value)))
+    }
     _ => {
       ObjectType::Null(Null {})
     }
@@ -325,6 +386,69 @@ mod tests {
       let obj = eval_program(prog);
       if let ObjectType::Boolean(b) = obj {
         assert_eq!(test.1, b.value);
+      } else {
+        assert_eq!(false, true)
+      }
+    }
+  }
+   #[test]
+  fn test_if_expressions () {
+    let tests = vec![      
+      ("if (true) { 10 }", 10),
+      ("if (1) { 10 }", 10),
+      ("if (1 < 2) { 10 }", 10),
+      ("if (1 > 2) { 10 } else { 20 }", 20),
+      ("if (1 < 2) { 10 } else { 20 }", 10)
+    ];
+    for test in tests {
+      let lexer = lexer::Lexer::new(&test.0);
+      let prog = ast::Parser::new(lexer).parse();
+      let obj = eval_program(prog);
+      if let ObjectType::Integer(i) = obj {
+        assert_eq!(test.1, i.value);
+      } else {
+        assert_eq!(false, true)
+      }
+    }
+  }
+   #[test]
+  fn test_if_no_else_expressions () {
+    let tests = vec![      
+      "if (false) { 10 }",
+      "if (1 > 2) { 10 }"
+    ];
+    for test in tests {
+      let lexer = lexer::Lexer::new(&test);
+      let prog = ast::Parser::new(lexer).parse();
+      let obj = eval_program(prog);
+      if let ObjectType::Null(_) = obj {
+        assert_eq!(true, true);
+      } else {
+        assert_eq!(false, true)
+      }
+    }
+  }
+  #[test]
+  fn test_return_statements() {
+    let tests = vec![      
+      ("return 10;", 10),
+      ("return 10; 9;", 10),
+      ("return 2 * 5; 9;", 10),
+      ("9; return 2 * 5; 9;", 10),
+      ("if (10 > 1) {
+          if (10 > 1) {
+            return 10;
+          }
+          return 1; 
+        }
+      ", 10)
+    ];
+    for test in tests {
+      let lexer = lexer::Lexer::new(&test.0);
+      let prog = ast::Parser::new(lexer).parse();
+      let obj = eval_program(prog);
+      if let ObjectType::Integer(i) = obj {
+        assert_eq!(i.value, test.1);
       } else {
         assert_eq!(false, true)
       }

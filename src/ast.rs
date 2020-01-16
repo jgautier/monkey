@@ -57,9 +57,9 @@ impl<'a> Node<'a> for LetStatement<'a> {
 }
 
 #[derive(Clone, Debug)]
-struct ReturnStatement<'a> {
+pub struct ReturnStatement<'a> {
     token: lexer::Token<'a>,
-    value: Box<Expression<'a>> 
+    pub value: Box<Expression<'a>> 
 }
 
 impl<'a> Node<'a> for ReturnStatement<'a> {
@@ -129,9 +129,9 @@ impl<'a> Node<'a> for Boolean<'a> {
     }
 }
 #[derive(Clone, Debug)]
-struct BlockStatement<'a> {
+pub struct BlockStatement<'a> {
     token: lexer::Token<'a>,
-    statements: Vec<StatementType<'a>>
+    pub statements: Vec<StatementType<'a>>
 }
 impl<'a> Node<'a> for BlockStatement<'a> {
     fn to_string(&self) -> String {
@@ -141,11 +141,11 @@ impl<'a> Node<'a> for BlockStatement<'a> {
 }
 
 #[derive(Clone, Debug)]
-struct If<'a> {
+pub struct If<'a> {
     token: lexer::Token<'a>,
-    condition: Box<Expression<'a>>,
-    consequence: BlockStatement<'a>,
-    alternative: Option<BlockStatement<'a>>
+    pub condition: Box<Expression<'a>>,
+    pub consequence: BlockStatement<'a>,
+    pub alternative: Option<BlockStatement<'a>>
 }
 
 impl<'a> Node<'a> for If<'a> {
