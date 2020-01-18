@@ -15,6 +15,7 @@ pub enum ObjectType {
   Boolean(Boolean),
   Null(Null),
   Return(Box<ObjectType>),
+  Function(Function),
   Error(String)
 }
 
@@ -35,6 +36,9 @@ impl Object for ObjectType {
       },
       ObjectType::Error(_) => {
         "ERROR".to_string()
+      },
+      ObjectType::Function(_) => {
+        "FUNCTION".to_string()
       }
     }
   }
@@ -54,6 +58,9 @@ impl Object for ObjectType {
       },
       ObjectType::Error(err_str) => {
         err_str.to_string()
+      },
+      ObjectType::Function(func) => {
+        "blah".to_string()
       }
     }
   }
@@ -70,6 +77,14 @@ pub struct Boolean {
 #[derive(Debug)]
 pub struct Null {}
 
+#[derive(Debug)]
+pub struct Function {
+  parameters: Vec<ast::Identifier>,
+  body: ast::BlockStatement,
+  env: Environment
+}
+
+#[derive(Debug)]
 pub struct Environment {
   store: HashMap<String, ObjectType>
 }
@@ -254,14 +269,14 @@ fn eval_expression(expr: ast::Expression, env: &mut Environment) -> ObjectType {
       if let ObjectType::Error(_) = right {
         return right
       }
-      eval_infix_expression(expr.operator, left, right)
+      eval_infix_expression(&expr.operator, left, right)
     },
     ast::Expression::Prefix(expr) => {
       let right = eval_expression(*expr.right, env);
       if let ObjectType::Error(_) = right {
         return right
       }
-      eval_prefix_expression(expr.operator, right)
+      eval_prefix_expression(&expr.operator, right)
     },
     ast::Expression::IntegerLiteral(int) => {
       ObjectType::Integer(Integer { value: int.value })

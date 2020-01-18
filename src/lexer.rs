@@ -43,20 +43,20 @@ impl fmt::Display for TokenType {
         write!(f, "{:?}", self)
     }
 }
-#[derive(Copy,Clone,PartialEq,Debug)]
-pub struct Token<'a> {
+#[derive(Clone,PartialEq,Debug)]
+pub struct Token {
     pub token_type: TokenType,
-    pub literal: &'a str
+    pub literal: String
 }
 
-impl fmt::Display for Token<'_> {
+impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "TokenType: {}, literal: {}", self.token_type, self.literal)
     }
 }
 
-impl<'a> Token<'a> {
-    pub fn from_chr(chr: &'a str) -> Option<Self> {
+impl Token {
+    pub fn from_chr(chr: &str) -> Option<Self> {
         let t = match chr {
             "0" => TokenType::EOF,
             //"IDENT" => TokenType::IDENT,
@@ -81,10 +81,10 @@ impl<'a> Token<'a> {
         };
         Some(Self {
             token_type: t,
-            literal: chr
+            literal: chr.to_string()
         })
     }
-    pub fn from_two_chars(chars: &'a str) -> Option<Self> {
+    pub fn from_two_chars(chars: &str) -> Option<Self> {
         let t = match chars {
             "==" => TokenType::EQ,
             "!=" => TokenType::NEQ,
@@ -94,10 +94,10 @@ impl<'a> Token<'a> {
         };
         Some(Self {
             token_type: t,
-            literal: chars
+            literal: chars.to_string()
         })
     }
-    pub fn from_identifier(string: &'a str) -> Option<Self> {
+    pub fn from_identifier(string: &str) -> Option<Self> {
         let t = match string {
             "let" => TokenType::LET,
             "fn" => TokenType::FUNCTION,
@@ -110,26 +110,26 @@ impl<'a> Token<'a> {
         };
         Some(Self {
             token_type: t,
-            literal: string
+            literal: string.to_string()
         })
     }
 }
 
-pub struct Lexer<'a> {
+pub struct Lexer {
     cur_index: usize,
-    input: &'a str
+    input: String
 }
 
-impl<'a> Lexer<'a> {
-    pub fn new(input: &'a str) -> Self {
+impl Lexer {
+    pub fn new(input: &str) -> Self {
         Self {
             cur_index: 0,
-            input: input
+            input: input.to_string()
         }
     }
 
     pub fn skip_whitespace(&mut self) {
-        for (i, chr) in self.input[self.cur_index..].char_indices() {
+        for (_, chr) in self.input[self.cur_index..].char_indices() {
             if !chr.is_whitespace() {
                 break;
             }
@@ -138,10 +138,10 @@ impl<'a> Lexer<'a> {
     }
 }
 
-impl<'a> Iterator for Lexer<'a> {
-    type Item = Token<'a>;
+impl Iterator for Lexer {
+    type Item = Token;
     
-    fn next(&mut self) -> Option<Token<'a>> {
+    fn next(&mut self) -> Option<Token> {
         if self.cur_index > self.input.len() {
             return None
         }
@@ -150,7 +150,7 @@ impl<'a> Iterator for Lexer<'a> {
             self.cur_index += 1;
             return Some(Token {
                 token_type: TokenType::EOF,
-                literal: "EOF"
+                literal: "EOF".to_string()
             })
         }
 
@@ -187,14 +187,14 @@ impl<'a> Iterator for Lexer<'a> {
                     };
                     let token = Some(Token {
                         token_type: TokenType::INT,
-                        literal: &self.input[self.cur_index..self.cur_index + next_index]
+                        literal: self.input[self.cur_index..self.cur_index + next_index].to_string()
                     });
                     self.cur_index += next_index;
                     token
                 } else {
                     Some(Token {
                         token_type: TokenType::ILLEGAL,
-                        literal: ""
+                        literal: "".to_string()
                     })
                 }
             },
