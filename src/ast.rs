@@ -165,10 +165,10 @@ impl Node for If {
 }
 
 #[derive(Clone, Debug)]
-struct Fn {
+pub struct Fn {
     token: lexer::Token,
-    params: Vec<Identifier>,
-    body: Box<BlockStatement>
+    pub params: Vec<Identifier>,
+    pub body: Box<BlockStatement>
 }
 
 impl Node for Fn {
@@ -182,10 +182,10 @@ impl Node for Fn {
 }
 
 #[derive(Clone, Debug)]
-struct Call {
+pub struct Call {
     token: lexer::Token,
-    function: Box<Expression>,
-    args: Vec<Expression>
+    pub function: Box<Expression>,
+    pub args: Vec<Expression>
 }
 
 impl Node for Call {
@@ -323,9 +323,7 @@ impl Parser {
         if !self.expect_peek(lexer::TokenType::ASSIGN) {
             return None;
         }
-
         self.next_token();
-
         let value = self.parse_expression(OperatorPrecedence::LOWEST).unwrap();
 
         if self.peek_token.token_type == lexer::TokenType::SEMICOLON {
@@ -353,6 +351,9 @@ impl Parser {
             token: self.cur_token.clone(),
             expr: expression
         };
+        if self.peek_token.token_type == lexer::TokenType::SEMICOLON {
+            self.next_token();
+        }
         Some(StatementType::Expression(expression_stmt))
     }
 
@@ -367,7 +368,6 @@ impl Parser {
             lexer::TokenType::FUNCTION => self.parse_fn_expression()?,
             _=> return None
         };
-
         while self.peek_token.token_type != lexer::TokenType::SEMICOLON && precedence < self.peek_precedence() {
             if !self.peek_token_is_infix() {
                 return Some(left);
@@ -402,7 +402,6 @@ impl Parser {
         if !self.expect_peek(lexer::TokenType::RPAREN) {
             return identifiers;
         }
-
         identifiers
     }
 
@@ -413,13 +412,11 @@ impl Parser {
         }
 
         let params = self.parse_fn_parameters();
-
+        
         if !self.expect_peek(lexer::TokenType::LBRACE) {
             return None;
         }
-
         let body = self.parse_block_statement()?;
-
         Some(Expression::Fn(Fn{ token: token, params: params, body: Box::new(body) }))
     }
 
@@ -514,7 +511,7 @@ impl Parser {
         self.next_token();
         args.push(self.parse_expression(OperatorPrecedence::LOWEST).unwrap());
 
-        while (self.peek_token.token_type == lexer::TokenType::COMMA) {
+        while self.peek_token.token_type == lexer::TokenType::COMMA {
             self.next_token();
             self.next_token();
             args.push(self.parse_expression(OperatorPrecedence::LOWEST).unwrap());
@@ -619,9 +616,10 @@ mod tests {
     #[test]
     fn let_statements() {
         let input = "
-            let x = 5;
-            let y = 10;
-            let foobar = 838383;
+             let x = 5;
+             let y = 10;
+             let foobar = 838383;
+             let identity = fn(x) { x; };
         ";
         let lexer = lexer::Lexer::new(&input);
         let mut parser = Parser::new(lexer);
@@ -791,7 +789,7 @@ mod tests {
             }
         }
     }
-
+    #[test]
      fn test_parse_infix_bool_expression() {
         let expressions = vec![
            ("true == true", true, "==", true),

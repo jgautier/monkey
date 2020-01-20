@@ -1,7 +1,8 @@
 use crate::ast;
 use crate::lexer;
 use crate::ast::Node;
-
+use std::rc::Rc;
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 pub trait Object {
@@ -9,7 +10,7 @@ pub trait Object {
   fn inspect(&self) -> String;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ObjectType {
   Integer(Integer),
   Boolean(Boolean),
@@ -60,7 +61,13 @@ impl Object for ObjectType {
         err_str.to_string()
       },
       ObjectType::Function(func) => {
-        "blah".to_string()
+        let params = func.params.clone().into_iter().map(|p| p.token.to_string()).collect::<Vec<String>>().join(",");
+        let strings = vec![
+          format!("fn({}) {{", params),
+          func.body.to_string(),
+          format!("}}")
+        ];
+        strings.join("\n")
       }
     }
   }
@@ -74,36 +81,45 @@ pub struct Integer {
 pub struct Boolean {
   value: bool
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Null {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Function {
-  parameters: Vec<ast::Identifier>,
+  params: Vec<ast::Identifier>,
   body: ast::BlockStatement,
-  env: Environment
+  env: Rc<RefCell<Environment>>
 }
 
 #[derive(Debug)]
 pub struct Environment {
-  store: HashMap<String, ObjectType>
+  store: HashMap<String, ObjectType>,
+  outer: Option<Rc<RefCell<Environment>>>
 }
 
 impl Environment {
-  pub fn new() -> Self {
+  pub fn new(outer: Option<Rc<RefCell<Environment>>>) -> Self {
     Self {
-      store: HashMap::new()
+      store: HashMap::new(),
+      outer: outer
     }
   }
-  fn get(&self, var_name: String) -> Option<&ObjectType> {
-    self.store.get(&var_name)
+  fn get(&self, var_name: String) -> Option<ObjectType> {
+    let val = self.store.get(&var_name);
+    if let Some(value) = val {
+      return Some(value.clone());
+    }
+    if let Some(env) = &self.outer {
+       return env.borrow().get(var_name);
+    }
+    return None;
   }
-  fn set(&mut self, var_name: String, value: ObjectType) {
-    self.store.insert(var_name, value);
+  fn set(&mut self, var_name: String, value: &ObjectType) {
+    self.store.insert(var_name, value.clone());
   }
 }
 
-pub fn eval_program(prog: ast::Program, env: &mut Environment) -> ObjectType {
+pub fn eval_program(prog: ast::Program, env: &Rc<RefCell<Environment>>) -> ObjectType {
   let mut result = ObjectType::Null(Null {});
   for stmt in prog.statements {
     result = eval_statement(stmt, env);
@@ -120,7 +136,7 @@ pub fn eval_program(prog: ast::Program, env: &mut Environment) -> ObjectType {
   result
 }
 
-pub fn eval_block_statements(stmts: Vec<ast::StatementType>, env: &mut Environment) -> ObjectType {
+pub fn eval_block_statements(stmts: Vec<ast::StatementType>, env: &Rc<RefCell<Environment>>) -> ObjectType {
   let mut result = ObjectType::Null(Null {});
   for stmt in stmts {
     result = eval_statement(stmt, env);
@@ -168,7 +184,7 @@ fn eval_prefix_expression(operator: &str, right: ObjectType) -> ObjectType {
     }
   }
 }
-fn eval_int_infix_expression (operator: &str, left: Integer, right: Integer) -> ObjectType {
+fn eval_int_infix_expression(operator: &str, left: Integer, right: Integer) -> ObjectType {
   match operator {
     "+" => {
       ObjectType::Integer(Integer { value: left.value + right.value })
@@ -240,7 +256,7 @@ fn is_truthy(val: ObjectType) -> bool {
     }
   }
 }
-fn eval_if_expression(if_expr: ast::If, env: &mut Environment) -> ObjectType {
+fn eval_if_expression(if_expr: ast::If, env: &Rc<RefCell<Environment>>) -> ObjectType {
   let condition = eval_expression(*if_expr.condition, env);
   if let ObjectType::Error(_) = condition {
     return condition
@@ -258,7 +274,7 @@ fn eval_if_expression(if_expr: ast::If, env: &mut Environment) -> ObjectType {
     }
   }
 }
-fn eval_expression(expr: ast::Expression, env: &mut Environment) -> ObjectType {
+fn eval_expression(expr: ast::Expression, env: &Rc<RefCell<Environment>>) -> ObjectType {
   match expr {
     ast::Expression::Infix(expr) => {
       let left = eval_expression(*expr.left, env);
@@ -288,7 +304,7 @@ fn eval_expression(expr: ast::Expression, env: &mut Environment) -> ObjectType {
       eval_if_expression(i, env)
     },
     ast::Expression::Identifier(id) => {
-      match env.get(id.to_string()) {
+      match env.borrow().get(id.to_string()) {
         Some(obj) => {
           match obj {
             ObjectType::Integer(i) => {
@@ -297,6 +313,9 @@ fn eval_expression(expr: ast::Expression, env: &mut Environment) -> ObjectType {
             ObjectType::Boolean(b) => {
               ObjectType::Boolean(Boolean { value: b.value })
             },
+            ObjectType::Function(f) => {
+              ObjectType::Function(Function { params: f.params, body: f.body, env: f.env })
+            }
             _ => {
               ObjectType::Null(Null {})
             }
@@ -305,13 +324,46 @@ fn eval_expression(expr: ast::Expression, env: &mut Environment) -> ObjectType {
         None => ObjectType::Error(format!("identifier not found: {}", id.to_string()))
       }
     },
+    ast::Expression::Call(call) => {
+      let res = eval_expression(*call.function, env);
+      match res {
+        ObjectType::Error(_) => {
+          res
+        },
+        ObjectType::Function(func) => {
+          let mut args = Vec::new();
+          for arg in call.args {
+            let res = eval_expression(arg, env);
+            if let ObjectType::Error(_) = res {
+              return res
+            }
+            args.push(res);
+          }
+          let mut func_env = Environment::new(Some(Rc::clone(&func.env)));
+          for (idx, param) in func.params.iter().enumerate() {
+            func_env.set(param.to_string(), &args[idx]);
+          }
+          let func_res = eval_block_statements(func.body.statements, &Rc::new(RefCell::new(func_env)));
+          if let ObjectType::Return(val) = func_res {
+            return *val;
+          }
+          return func_res;
+        },
+        _ => {
+          ObjectType::Error("Not a Function".to_string())
+        }
+      }
+    }
+    ast::Expression::Fn(fn_expr) => {
+      ObjectType::Function(Function { params: fn_expr.params, body: *fn_expr.body, env: Rc::clone(env) })
+    },
     _ => {
       ObjectType::Null(Null {})
     }
   }
 }
 
-fn eval_statement(node: ast::StatementType, env: &mut Environment) -> ObjectType {
+fn eval_statement(node: ast::StatementType, env: &Rc<RefCell<Environment>>) -> ObjectType {
   match node {
     ast::StatementType::Expression(expr) => {
       eval_expression(expr.expr, env)
@@ -325,7 +377,7 @@ fn eval_statement(node: ast::StatementType, env: &mut Environment) -> ObjectType
     },
     ast::StatementType::Let(stmt) => {
       let ret = eval_expression(*stmt.value, env);
-      env.set(stmt.name.to_string(), ret);
+      env.borrow_mut().set(stmt.name.to_string(), &ret);
       ObjectType::Null(Null {})
     },
     _ => {
@@ -341,8 +393,8 @@ mod tests {
   fn test_integer_literal() {
     let lexer = lexer::Lexer::new(&"5");
     let prog = ast::Parser::new(lexer).parse();
-    let mut env = Environment::new();
-    let obj = eval_program(prog, &mut env);
+    let env = Rc::new(RefCell::new(Environment::new(None)));
+    let obj = eval_program(prog, &env);
     if let ObjectType::Integer(i) = obj {
       assert_eq!(5, i.value);
     } else {
@@ -353,8 +405,8 @@ mod tests {
   fn test_boolean_literal() {
     let lexer = lexer::Lexer::new(&"true");
     let prog = ast::Parser::new(lexer).parse();
-    let mut env = Environment::new();
-    let obj = eval_program(prog, &mut env);
+    let env = Rc::new(RefCell::new(Environment::new(None)));
+    let obj = eval_program(prog, &env);
     if let ObjectType::Boolean(i) = obj {
       assert_eq!(true, i.value);
     } else {
@@ -374,8 +426,8 @@ mod tests {
     for test in tests {
       let lexer = lexer::Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
-      let mut env = Environment::new();
-      let obj = eval_program(prog, &mut env);
+      let env = Rc::new(RefCell::new(Environment::new(None)));
+      let obj = eval_program(prog, &env);
       if let ObjectType::Boolean(i) = obj {
         assert_eq!(test.1, i.value);
       } else {
@@ -394,8 +446,8 @@ mod tests {
     for test in tests {
       let lexer = lexer::Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
-      let mut env = Environment::new();
-      let obj = eval_program(prog, &mut env);
+      let env = Rc::new(RefCell::new(Environment::new(None)));
+      let obj = eval_program(prog, &env);
       if let ObjectType::Integer(i) = obj {
         assert_eq!(test.1, i.value);
       } else {
@@ -421,8 +473,8 @@ mod tests {
     for test in tests {
       let lexer = lexer::Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
-      let mut env = Environment::new();
-      let obj = eval_program(prog, &mut env);
+      let env = Rc::new(RefCell::new(Environment::new(None)));
+      let obj = eval_program(prog, &env);
       if let ObjectType::Integer(i) = obj {
         assert_eq!(test.1, i.value);
       } else {
@@ -445,8 +497,8 @@ mod tests {
     for test in tests {
       let lexer = lexer::Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
-      let mut env = Environment::new();
-      let obj = eval_program(prog, &mut env);
+      let env = Rc::new(RefCell::new(Environment::new(None)));
+      let obj = eval_program(prog, &env);
       if let ObjectType::Boolean(b) = obj {
         assert_eq!(test.1, b.value);
       } else {
@@ -470,8 +522,8 @@ mod tests {
     for test in tests {
       let lexer = lexer::Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
-      let mut env = Environment::new();
-      let obj = eval_program(prog, &mut env);
+      let env = Rc::new(RefCell::new(Environment::new(None)));
+      let obj = eval_program(prog, &env);
       if let ObjectType::Boolean(b) = obj {
         assert_eq!(test.1, b.value);
       } else {
@@ -491,8 +543,8 @@ mod tests {
     for test in tests {
       let lexer = lexer::Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
-      let mut env = Environment::new();
-      let obj = eval_program(prog, &mut env);
+      let env = Rc::new(RefCell::new(Environment::new(None)));
+      let obj = eval_program(prog, &env);
       if let ObjectType::Integer(i) = obj {
         assert_eq!(test.1, i.value);
       } else {
@@ -509,8 +561,8 @@ mod tests {
     for test in tests {
       let lexer = lexer::Lexer::new(&test);
       let prog = ast::Parser::new(lexer).parse();
-      let mut env = Environment::new();
-      let obj = eval_program(prog, &mut env);
+      let env = Rc::new(RefCell::new(Environment::new(None)));
+      let obj = eval_program(prog, &env);
       if let ObjectType::Null(_) = obj {
         assert_eq!(true, true);
       } else {
@@ -536,8 +588,8 @@ mod tests {
     for test in tests {
       let lexer = lexer::Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
-      let mut env = Environment::new();
-      let obj = eval_program(prog, &mut env);
+      let env = Rc::new(RefCell::new(Environment::new(None)));
+      let obj = eval_program(prog, &env);
       if let ObjectType::Integer(i) = obj {
         assert_eq!(i.value, test.1);
       } else {
@@ -566,8 +618,8 @@ mod tests {
     for test in tests {
       let lexer = lexer::Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
-      let mut env = Environment::new();
-      let obj = eval_program(prog, &mut env);
+      let env = Rc::new(RefCell::new(Environment::new(None)));
+      let obj = eval_program(prog, &env);
       if let ObjectType::Error(err_str) = obj {
         assert_eq!(err_str, test.1);
       } else {
@@ -587,8 +639,53 @@ mod tests {
     for test in tests {
       let lexer = lexer::Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
-      let mut env = Environment::new();
-      let obj = eval_program(prog, &mut env);
+      let env = Rc::new(RefCell::new(Environment::new(None)));
+      let obj = eval_program(prog, &env);
+      if let ObjectType::Integer(i) = obj {
+        assert_eq!(i.value, test.1);
+      } else {
+        println!("{}", obj.inspect());
+        assert_eq!(false, true)
+      }
+    }
+  }
+  #[test]
+  fn test_funcs() {
+    let tests = vec![      
+      ("let identity = fn(x) { x; }; identity(5);", 5),
+      ("let identity = fn(x) { return x; }; identity(5);", 5),
+      ("let double = fn(x) { x * 2; }; double(5);", 10),
+      ("let add = fn(x, y) { x + y; }; add(5, 5);", 10),
+      ("let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));", 20),
+      ("fn(x) { x; }(5)",5)
+    ];
+    for test in tests {
+      let lexer = lexer::Lexer::new(&test.0);
+      let prog = ast::Parser::new(lexer).parse();
+      let env = Rc::new(RefCell::new(Environment::new(None)));
+      let obj = eval_program(prog, &env);
+      if let ObjectType::Integer(i) = obj {
+        assert_eq!(i.value, test.1);
+      } else {
+        println!("{}", obj.inspect());
+        assert_eq!(false, true)
+      }
+    }
+  }
+  #[test]
+  fn test_closures() {
+    let tests = vec![      
+      ("let newAdder = fn(x) {
+          fn(y) { x + y };
+        };
+        let addTwo = newAdder(2);
+        addTwo(2);", 4),
+    ];
+    for test in tests {
+      let lexer = lexer::Lexer::new(&test.0);
+      let prog = ast::Parser::new(lexer).parse();
+      let env = Rc::new(RefCell::new(Environment::new(None)));
+      let obj = eval_program(prog, &env);
       if let ObjectType::Integer(i) = obj {
         assert_eq!(i.value, test.1);
       } else {

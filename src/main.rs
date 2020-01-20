@@ -1,7 +1,8 @@
 mod lexer;
 mod ast;
 mod eval;
-use ast::Node;
+use std::cell::RefCell;
+use std::rc::Rc;
 use eval::Object;
 use std::io;
 use std::io::Write;
@@ -14,7 +15,7 @@ fn print_prompt() {
 }
 
 fn start() {
-    let mut env = eval::Environment::new();
+    let env = Rc::new(RefCell::new(eval::Environment::new(None)));
     loop {
         let mut input = String::new();
         match io::stdin().read_line(&mut input) {
@@ -28,7 +29,7 @@ fn start() {
                             println!("{}", error);
                         }
                     } else {
-                        let result = eval::eval_program(program, &mut env);
+                        let result = eval::eval_program(program, &env);
                         match result {
                             eval::ObjectType::Null(_) => {
 
