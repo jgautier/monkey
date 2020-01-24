@@ -39,7 +39,7 @@ pub struct Identifier {
 
 impl Node for Identifier {
     fn to_string(&self) -> String {
-        format!("{}", self.token.literal)
+        self.token.literal.to_string()
     }
 }
 
@@ -75,7 +75,7 @@ pub struct ExpressionStatement {
 }
 impl Node for ExpressionStatement {
     fn to_string(&self) -> String {
-        format!("{}", self.expr.to_string())
+        self.expr.to_string()
     }
 }
 
@@ -260,19 +260,18 @@ impl Parser {
         let cur_token = lexer.next().unwrap();
         let peek_token = lexer.next().unwrap();
         Self {
-            lexer: lexer,
-            cur_token: cur_token,
-            peek_token: peek_token,
-            infix_operators: infix_operators,
+            lexer,
+            cur_token,
+            peek_token,
+            infix_operators,
             errors: Vec::<String>::new(),
         }
     }
 
     fn next_token(&mut self) {
         self.cur_token = self.peek_token.clone();
-        match self.lexer.next() {
-            Some(token) => self.peek_token = token,
-            _=> {}
+        if let Some(token) = self.lexer.next() {
+            self.peek_token = token
         }
     }
 
@@ -281,13 +280,9 @@ impl Parser {
             statements: Vec::<StatementType>::new()
         };
         while self.cur_token.token_type != lexer::TokenType::EOF {
-            let statement = self.parse_statement();
-            match statement {
-                Some(statement) => program.statements.push(statement),
-                _ => {
-                    //println!("do nothing {:?}", self.cur_token.token_type);
-                }// do nothing
-            };
+            if let Some(statement) = self.parse_statement() {
+                program.statements.push(statement);
+            }
             self.next_token();
         }
         program
@@ -304,7 +299,7 @@ impl Parser {
         }
 
         Some(StatementType::Return(ReturnStatement{
-            token: token,
+            token,
             value: Box::new(value)
         }))
     }
@@ -417,7 +412,7 @@ impl Parser {
             return None;
         }
         let body = self.parse_block_statement()?;
-        Some(Expression::Fn(Fn{ token: token, params: params, body: Box::new(body) }))
+        Some(Expression::Fn(Fn{ token, params, body: Box::new(body) }))
     }
 
     fn parse_if_expression(&mut self) -> Option<Expression> {
@@ -446,7 +441,7 @@ impl Parser {
         } else {
             None
         };
-        Some(Expression::If(If { token: token, condition: Box::new(condition), consequence: consequence, alternative: alternative }))
+        Some(Expression::If(If { token, condition: Box::new(condition), consequence, alternative }))
     }
 
     fn parse_block_statement(&mut self) -> Option<BlockStatement> {
@@ -480,7 +475,7 @@ impl Parser {
     fn parse_integer_literal_expression(&mut self) -> Option<Expression> {
         match self.cur_token.literal.parse() {
             Ok(value) => {
-                Some(Expression::IntegerLiteral(IntegerLiteral{ token: self.cur_token.clone(), value: value }))
+                Some(Expression::IntegerLiteral(IntegerLiteral{ token: self.cur_token.clone(), value }))
             },
             Err(e) => {
                 self.errors.push(format!("Error parsing integer literal: {}", e));
@@ -495,7 +490,7 @@ impl Parser {
         self.next_token();
         match self.parse_expression(OperatorPrecedence::PREFIX) {
             Some(expr) => {
-                Some(Expression::Prefix(Prefix{ token: token, operator: operator.to_string(), right: Box::new(expr) }))
+                Some(Expression::Prefix(Prefix{ token, operator: operator.to_string(), right: Box::new(expr) }))
             },
             None => None
         }
@@ -521,7 +516,7 @@ impl Parser {
             return args;
         }
 
-        return args;
+        args
     }
 
     fn parse_call_expression(&mut self, function: Expression) -> Option<Expression> {
@@ -537,7 +532,7 @@ impl Parser {
         let precedence = self.cur_precedence();
         self.next_token();
         match self.parse_expression(precedence) {
-            Some(expr) => Some(Expression::Infix(Infix{ token: token, left: Box::new(left), operator: operator, right: Box::new(expr) })),
+            Some(expr) => Some(Expression::Infix(Infix{ token, left: Box::new(left), operator, right: Box::new(expr) })),
             None => None
         }
     }
@@ -594,7 +589,7 @@ mod tests {
                 }
             },
             _ => {
-                assert!(false, "received wrong statement type")
+                panic!("received wrong statement type")
             }
         }
     }
@@ -608,7 +603,7 @@ mod tests {
                 }
             },
             _ => {
-                 assert!(false, "received wrong statement type")
+                panic!("received wrong statement type")
             }
         }
     }
@@ -618,7 +613,7 @@ mod tests {
         let input = "
              let x = 5;
              let y = 10;
-             let foobar = 838383;
+             let foobar = 838;
              let identity = fn(x) { x; };
         ";
         let lexer = lexer::Lexer::new(&input);
@@ -626,7 +621,7 @@ mod tests {
         let program = parser.parse();
         check_parse_errors(parser);
         let identifiers = vec!["x", "y", "foobar"];
-        let values = vec![5, 10, 838383];
+        let values = vec![5, 10, 838];
         for i in 0..3 {
             test_let_statement(&program.statements[i], identifiers[i], values[i]);
         }
@@ -637,15 +632,15 @@ mod tests {
          let input = "
             return 5;
             return 10;
-            return 993322;
+            return 993;
         ";
         let lexer = lexer::Lexer::new(&input);
         let mut parser = Parser::new(lexer);
         let program = parser.parse();
         check_parse_errors(parser);
-        let values = vec![5, 10, 993322];
-        for i in 0..3 {
-            test_return_statement(&program.statements[i], values[i]);
+        let values = vec![5, 10, 993];
+        for (index, value) in program.statements.iter().enumerate() {
+            test_return_statement(&value, values[index]);
         }
     }
     #[test]
@@ -680,10 +675,12 @@ mod tests {
             StatementType::Expression(stmt) => {
                 match &stmt.expr {
                     Expression::Identifier(expr) =>  assert_eq!(expr.token.literal, "blah"),
-                    _ => {}
+                    _ => {
+                        panic!("wrong expression type")
+                    }
                 }              
             },
-            _ => assert!(false, "wrong statement type")
+            _ => panic!("wrong statement type")
         }
     }
     #[test]
@@ -700,10 +697,12 @@ mod tests {
             StatementType::Expression(stmt) => {
                 match &stmt.expr {
                     Expression::IntegerLiteral(expr) =>  assert_eq!(expr.value, 5i64),
-                    _ => {}
+                    _ => {
+                        panic!("wrong expression type")
+                    }
                 }              
             },
-            _ => assert!(false, "wrong statement type")
+            _ => panic!("wrong statement type")
         }
     }
 
@@ -727,16 +726,16 @@ mod tests {
                                 assert_eq!(i.value, 5)
                             },
                             _ => {
-                                assert!(false, "wrong expression type")
+                                panic!("wrong expression type")
                             }
                         }
                     }
                     _ => {
-                        assert!(false, "wrong expression type")
+                        panic!("wrong expression type")
                     }
                 }              
             },
-            _ => assert!(false, "wrong statement type")
+            _ => panic!("wrong statement type")
         }
     }
     #[test]
@@ -768,7 +767,7 @@ mod tests {
                                     assert_eq!(i.value, expression.1)
                                 },
                                 _ => {
-                                    assert!(false, "wrong expression type")
+                                    panic!("wrong expression type")
                                 }   
                             }
                             match &*expr.right {
@@ -776,16 +775,16 @@ mod tests {
                                     assert_eq!(i.value, expression.3)
                                 },
                                 _ => {
-                                    assert!(false, "wrong expression type")
+                                    panic!("wrong expression type")
                                 }   
                             }
                         }
                         _ => {
-                            assert!(false, "wrong expression type")
+                            panic!("wrong expression type")
                         }
                     }              
                 },
-                _ => assert!(false, "wrong statement type")
+                _ => panic!("wrong statement type")
             }
         }
     }
@@ -813,7 +812,7 @@ mod tests {
                                     assert_eq!(i.value, expression.1)
                                 },
                                 _ => {
-                                    assert!(false, "wrong expression type")
+                                    panic!("wrong expression type")
                                 }   
                             }
                             match &*expr.right {
@@ -821,16 +820,16 @@ mod tests {
                                     assert_eq!(i.value, expression.3)
                                 },
                                 _ => {
-                                    assert!(false, "wrong expression type")
+                                    panic!("wrong expression type")
                                 }   
                             }
                         }
                         _ => {
-                            assert!(false, "wrong expression type")
+                            panic!("wrong expression type")
                         }
                     }              
                 },
-                _ => assert!(false, "wrong statement type")
+                _ => panic!("wrong statement type")
             }
         }
     }

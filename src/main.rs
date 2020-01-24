@@ -24,7 +24,7 @@ fn start() {
                     let lexer = lexer::Lexer::new(&input);
                     let mut parser = ast::Parser::new(lexer);
                     let program = parser.parse();
-                    if parser.errors.len() > 0 {
+                    if !parser.errors.is_empty() {
                         for error in parser.errors {
                             println!("{}", error);
                         }

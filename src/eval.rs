@@ -64,7 +64,7 @@ impl Object for ObjectType {
         let strings = vec![
           format!("fn({}) {{", params),
           func.body.to_string(),
-          format!("}}")
+          "}}".to_string()
         ];
         strings.join("\n")
       }
@@ -100,7 +100,7 @@ impl Environment {
   pub fn new(outer: Option<Rc<RefCell<Environment>>>) -> Self {
     Self {
       store: HashMap::new(),
-      outer: outer
+      outer
     }
   }
   fn get(&self, var_name: String) -> Option<ObjectType> {
@@ -111,7 +111,7 @@ impl Environment {
     if let Some(env) = &self.outer {
        return env.borrow().get(var_name);
     }
-    return None;
+    None
   }
   fn set(&mut self, var_name: String, value: &ObjectType) {
     self.store.insert(var_name, value.clone());
@@ -151,11 +151,7 @@ pub fn eval_block_statements(stmts: Vec<ast::StatementType>, env: &Rc<RefCell<En
 fn eval_bang_operator(right: ObjectType) -> ObjectType {
   let val = match right {
     ObjectType::Boolean(b) => {
-      if b.value {
-        false
-      } else {
-        true
-      }
+      !b.value
     },
     ObjectType::Null(_) => true,
     _ => false
@@ -346,7 +342,7 @@ fn eval_expression(expr: ast::Expression, env: &Rc<RefCell<Environment>>) -> Obj
           if let ObjectType::Return(val) = func_res {
             return *val;
           }
-          return func_res;
+          func_res
         },
         _ => {
           ObjectType::Error("Not a Function".to_string())

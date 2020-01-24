@@ -157,15 +157,12 @@ impl Iterator for Lexer {
         if self.cur_index + 2 < self.input.len() {
             let chars = &self.input[self.cur_index..self.cur_index + 2];
             let token = Token::from_two_chars(chars);
-            match token {
-                Some(_) => {
-                    self.cur_index += 2;
-                    return token;
-                },
-                _ => {}
+            if token.is_some() {
+                self.cur_index += 2;
+                return token;
             }
         }
-        let chr = &self.input[self.cur_index..self.cur_index + 1];
+        let chr = &self.input[self.cur_index..=self.cur_index];
         let token = Token::from_chr(chr);
         match token {
             None => {
@@ -209,6 +206,7 @@ impl Iterator for Lexer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[allow(clippy::cognitive_complexity)]
     #[test]
     fn test_next_token() {
         static INPUT: &str = " 
