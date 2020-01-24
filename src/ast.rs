@@ -52,7 +52,7 @@ pub struct LetStatement {
 
 impl Node for LetStatement {
     fn to_string(&self) -> String {
-        format!("let {} = {};\n", self.name.token.literal, self.value.to_string()).to_string()
+        format!("let {} = {};\n", self.name.token.literal, self.value.to_string())
     }
 }
 
@@ -64,7 +64,7 @@ pub struct ReturnStatement {
 
 impl Node for ReturnStatement {
     fn to_string(&self) -> String {
-        format!("return {};\n", self.value.to_string()).to_string()
+        format!("return {};\n", self.value.to_string())
     }
 }
 
@@ -490,7 +490,7 @@ impl Parser {
         self.next_token();
         match self.parse_expression(OperatorPrecedence::PREFIX) {
             Some(expr) => {
-                Some(Expression::Prefix(Prefix{ token, operator: operator.to_string(), right: Box::new(expr) }))
+                Some(Expression::Prefix(Prefix{ token, operator, right: Box::new(expr) }))
             },
             None => None
         }
