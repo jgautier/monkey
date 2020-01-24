@@ -650,7 +650,7 @@ mod tests {
     }
     #[test]
     fn to_string() {
-        let program = Program {
+        Program {
             statements: vec![
                 StatementType::Let(LetStatement {
                     token: lexer::Token{ token_type: lexer::TokenType::LET, literal: "let".to_string()},

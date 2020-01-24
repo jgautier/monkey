@@ -1,5 +1,4 @@
 use crate::ast;
-use crate::lexer;
 use crate::ast::Node;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -357,9 +356,6 @@ fn eval_expression(expr: ast::Expression, env: &Rc<RefCell<Environment>>) -> Obj
     ast::Expression::Fn(fn_expr) => {
       ObjectType::Function(Function { params: fn_expr.params, body: *fn_expr.body, env: Rc::clone(env) })
     },
-    _ => {
-      ObjectType::Null(Null {})
-    }
   }
 }
 
@@ -379,9 +375,6 @@ fn eval_statement(node: ast::StatementType, env: &Rc<RefCell<Environment>>) -> O
       let ret = eval_expression(*stmt.value, env);
       env.borrow_mut().set(stmt.name.to_string(), &ret);
       ObjectType::Null(Null {})
-    },
-    _ => {
-      ObjectType::Null(Null {})
     }
   }
 }
@@ -389,9 +382,10 @@ fn eval_statement(node: ast::StatementType, env: &Rc<RefCell<Environment>>) -> O
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::lexer::Lexer;
   #[test]
   fn test_integer_literal() {
-    let lexer = lexer::Lexer::new(&"5");
+    let lexer = Lexer::new(&"5");
     let prog = ast::Parser::new(lexer).parse();
     let env = Rc::new(RefCell::new(Environment::new(None)));
     let obj = eval_program(prog, &env);
@@ -403,7 +397,7 @@ mod tests {
   }
   #[test]
   fn test_boolean_literal() {
-    let lexer = lexer::Lexer::new(&"true");
+    let lexer = Lexer::new(&"true");
     let prog = ast::Parser::new(lexer).parse();
     let env = Rc::new(RefCell::new(Environment::new(None)));
     let obj = eval_program(prog, &env);
@@ -424,7 +418,7 @@ mod tests {
       ("!!5", true)
     ];
     for test in tests {
-      let lexer = lexer::Lexer::new(&test.0);
+      let lexer = Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
       let env = Rc::new(RefCell::new(Environment::new(None)));
       let obj = eval_program(prog, &env);
@@ -444,7 +438,7 @@ mod tests {
       ("-10", -10),
     ];
     for test in tests {
-      let lexer = lexer::Lexer::new(&test.0);
+      let lexer = Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
       let env = Rc::new(RefCell::new(Environment::new(None)));
       let obj = eval_program(prog, &env);
@@ -471,7 +465,7 @@ mod tests {
       ("(5 + 10 * 2 + 15 / 3) * 2 + -10", 50)
     ];
     for test in tests {
-      let lexer = lexer::Lexer::new(&test.0);
+      let lexer = Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
       let env = Rc::new(RefCell::new(Environment::new(None)));
       let obj = eval_program(prog, &env);
@@ -495,7 +489,7 @@ mod tests {
       ("1 != 2", true)
     ];
     for test in tests {
-      let lexer = lexer::Lexer::new(&test.0);
+      let lexer = Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
       let env = Rc::new(RefCell::new(Environment::new(None)));
       let obj = eval_program(prog, &env);
@@ -520,7 +514,7 @@ mod tests {
       ("(1 > 2) == false", true)
     ];
     for test in tests {
-      let lexer = lexer::Lexer::new(&test.0);
+      let lexer = Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
       let env = Rc::new(RefCell::new(Environment::new(None)));
       let obj = eval_program(prog, &env);
@@ -541,7 +535,7 @@ mod tests {
       ("if (1 < 2) { 10 } else { 20 }", 10)
     ];
     for test in tests {
-      let lexer = lexer::Lexer::new(&test.0);
+      let lexer = Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
       let env = Rc::new(RefCell::new(Environment::new(None)));
       let obj = eval_program(prog, &env);
@@ -559,7 +553,7 @@ mod tests {
       "if (1 > 2) { 10 }"
     ];
     for test in tests {
-      let lexer = lexer::Lexer::new(&test);
+      let lexer = Lexer::new(&test);
       let prog = ast::Parser::new(lexer).parse();
       let env = Rc::new(RefCell::new(Environment::new(None)));
       let obj = eval_program(prog, &env);
@@ -586,7 +580,7 @@ mod tests {
       ", 10)
     ];
     for test in tests {
-      let lexer = lexer::Lexer::new(&test.0);
+      let lexer = Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
       let env = Rc::new(RefCell::new(Environment::new(None)));
       let obj = eval_program(prog, &env);
@@ -616,7 +610,7 @@ mod tests {
       ("foobar", "identifier not found: foobar")
     ];
     for test in tests {
-      let lexer = lexer::Lexer::new(&test.0);
+      let lexer = Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
       let env = Rc::new(RefCell::new(Environment::new(None)));
       let obj = eval_program(prog, &env);
@@ -637,7 +631,7 @@ mod tests {
       ("let a = 5; let b = a; let c = a + b + 5; c;", 15)
     ];
     for test in tests {
-      let lexer = lexer::Lexer::new(&test.0);
+      let lexer = Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
       let env = Rc::new(RefCell::new(Environment::new(None)));
       let obj = eval_program(prog, &env);
@@ -660,7 +654,7 @@ mod tests {
       ("fn(x) { x; }(5)",5)
     ];
     for test in tests {
-      let lexer = lexer::Lexer::new(&test.0);
+      let lexer = Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
       let env = Rc::new(RefCell::new(Environment::new(None)));
       let obj = eval_program(prog, &env);
@@ -682,7 +676,7 @@ mod tests {
         addTwo(2);", 4),
     ];
     for test in tests {
-      let lexer = lexer::Lexer::new(&test.0);
+      let lexer = Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
       let env = Rc::new(RefCell::new(Environment::new(None)));
       let obj = eval_program(prog, &env);
