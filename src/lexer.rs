@@ -196,7 +196,7 @@ impl Iterator for Lexer {
                     };
                     let token = Some(Token {
                         token_type: TokenType::STRING,
-                        literal: self.input[self.cur_index + 1..self.cur_index + next_index + 1].to_string()
+                        literal: self.input[self.cur_index + 1..=self.cur_index + next_index].to_string()
                     });
                     self.cur_index += next_index + 2;
                     token
