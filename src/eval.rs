@@ -12,6 +12,7 @@ pub trait Object {
 #[derive(Debug, Clone)]
 pub enum ObjectType {
   Integer(Integer),
+  StringObj(StringObj),
   Boolean(Boolean),
   Null(Null),
   Return(Box<ObjectType>),
@@ -39,6 +40,9 @@ impl Object for ObjectType {
       },
       ObjectType::Function(_) => {
         "FUNCTION".to_string()
+      },
+      ObjectType::StringObj(_) => {
+        "STRING".to_string()
       }
     }
   }
@@ -59,6 +63,9 @@ impl Object for ObjectType {
       ObjectType::Error(err_str) => {
         err_str.to_string()
       },
+      ObjectType::StringObj(string) => {
+        string.value.to_string()
+      }
       ObjectType::Function(func) => {
         let params = func.params.clone().into_iter().map(|p| p.token.to_string()).collect::<Vec<String>>().join(",");
         let strings = vec![
@@ -75,6 +82,12 @@ impl Object for ObjectType {
 pub struct Integer {
   value: i64
 }
+
+#[derive(Debug, Clone)]
+pub struct StringObj {
+  value: String
+}
+
 
 #[derive(Debug, Clone, Copy)]
 pub struct Boolean {
@@ -179,6 +192,16 @@ fn eval_prefix_expression(operator: &str, right: ObjectType) -> ObjectType {
     }
   }
 }
+fn eval_string_infix_expression(operator: &str, left: StringObj, right: StringObj) -> ObjectType {
+  match operator {
+    "+" => {
+      ObjectType::StringObj(StringObj { value: format!("{}{}", left.value, right.value) })
+    },
+    _ => {
+       ObjectType::Error(format!("unknown operator: {} for strings.", operator)) 
+    }
+  }
+}
 fn eval_int_infix_expression(operator: &str, left: Integer, right: Integer) -> ObjectType {
   match operator {
     "+" => {
@@ -232,6 +255,9 @@ fn eval_infix_expression(operator: &str, left: ObjectType, right: ObjectType) ->
     },
     (ObjectType::Boolean(b1), ObjectType::Boolean(b2)) => {
       eval_bool_infix_expression(operator, b1, b2)
+    },
+    (ObjectType::StringObj(s1), ObjectType::StringObj(s2)) => {
+      eval_string_infix_expression(operator, s1, s2)
     }
     _ => {
       ObjectType::Error(format!("type mismatch: {} {} {}", left_type, operator, right_type)) 
@@ -311,6 +337,9 @@ fn eval_expression(expr: ast::Expression, env: &Rc<RefCell<Environment>>) -> Obj
             ObjectType::Function(f) => {
               ObjectType::Function(Function { params: f.params, body: f.body, env: f.env })
             }
+            ObjectType::StringObj(s) => {
+              ObjectType::StringObj(StringObj { value: s.value })
+            }
             _ => {
               ObjectType::Null(Null {})
             }
@@ -352,6 +381,9 @@ fn eval_expression(expr: ast::Expression, env: &Rc<RefCell<Environment>>) -> Obj
     ast::Expression::Fn(fn_expr) => {
       ObjectType::Function(Function { params: fn_expr.params, body: *fn_expr.body, env: Rc::clone(env) })
     },
+    ast::Expression::StringLiteral(string) => {
+      ObjectType::StringObj(StringObj{ value: string.value })
+    }
   }
 }
 
@@ -677,6 +709,25 @@ mod tests {
       let env = Rc::new(RefCell::new(Environment::new(None)));
       let obj = eval_program(prog, &env);
       if let ObjectType::Integer(i) = obj {
+        assert_eq!(i.value, test.1);
+      } else {
+        println!("{}", obj.inspect());
+        assert_eq!(false, true)
+      }
+    }
+  }
+  #[test]
+  fn test_string() {
+    let tests = vec![      
+      ("\"Hello World!\"", "Hello World!"),
+      ("\"Hello\" + \" \" + \"World!\"", "Hello World!")
+    ];
+    for test in tests {
+      let lexer = Lexer::new(&test.0);
+      let prog = ast::Parser::new(lexer).parse();
+      let env = Rc::new(RefCell::new(Environment::new(None)));
+      let obj = eval_program(prog, &env);
+      if let ObjectType::StringObj(i) = obj {
         assert_eq!(i.value, test.1);
       } else {
         println!("{}", obj.inspect());

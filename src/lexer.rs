@@ -7,6 +7,7 @@ pub enum TokenType {
     // Identifiers + literals
     IDENT,
     INT,
+    STRING,
 
     // Operators
     ASSIGN,
@@ -178,7 +179,7 @@ impl Iterator for Lexer {
                     self.cur_index += next_index;
                     token
                 } else if chr.is_numeric() {
-                     let next_index = match self.input[self.cur_index..].chars().position(|chr| !chr.is_numeric()) {
+                    let next_index = match self.input[self.cur_index..].chars().position(|chr| !chr.is_numeric()) {
                         Some(num) => num,
                         _ => self.input.len() - self.cur_index
                     };
@@ -187,6 +188,17 @@ impl Iterator for Lexer {
                         literal: self.input[self.cur_index..self.cur_index + next_index].to_string()
                     });
                     self.cur_index += next_index;
+                    token
+                } else if chr == '"' {
+                    let next_index = match self.input[self.cur_index + 1..].chars().position(|chr| chr == '"') {
+                        Some(num) => num,
+                        _ => self.input.len() - self.cur_index
+                    };
+                    let token = Some(Token {
+                        token_type: TokenType::STRING,
+                        literal: self.input[self.cur_index + 1..self.cur_index + next_index + 1].to_string()
+                    });
+                    self.cur_index += next_index + 2;
                     token
                 } else {
                     Some(Token {
@@ -228,6 +240,8 @@ mod tests {
 
             10 == 10;
             10 != 9;
+            \"foobar\";
+            \"foo bar\";
         ";
         let mut lexer = Lexer::new(&INPUT);
         assert_eq!(TokenType::LET, lexer.next().unwrap().token_type);
@@ -332,6 +346,14 @@ mod tests {
         let nine_number = lexer.next().unwrap();
         assert_eq!(TokenType::INT, nine_number.token_type);
         assert_eq!("9", nine_number.literal);
+        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
+        let foobar = lexer.next().unwrap();
+        assert_eq!(TokenType::STRING, foobar.token_type);
+        assert_eq!("foobar", foobar.literal);
+        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
+        let foo_bar = lexer.next().unwrap();
+        assert_eq!(TokenType::STRING, foo_bar.token_type);
+        assert_eq!("foo bar", foo_bar.literal);
         assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
         assert_eq!(TokenType::EOF, lexer.next().unwrap().token_type);
         assert_eq!(None, lexer.next());

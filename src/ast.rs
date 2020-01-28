@@ -92,6 +92,19 @@ impl Node for IntegerLiteral {
 }
 
 #[derive(Clone, Debug)]
+pub struct StringLiteral {
+    token: lexer::Token,
+    pub value: String
+}
+
+impl Node for StringLiteral {
+    fn to_string(&self) -> String {
+        format!("\"{}\";", self.value)
+    }
+}
+
+
+#[derive(Clone, Debug)]
 pub struct Prefix {
     token: lexer::Token,
     pub operator: String,
@@ -202,6 +215,7 @@ impl Node for Call {
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
+    StringLiteral(StringLiteral),
     Prefix(Prefix),
     Infix(Infix),
     Boolean(Boolean),
@@ -215,6 +229,7 @@ impl Node for Expression {
         match self {
             Expression::Identifier(ident) => ident.to_string(),
             Expression::IntegerLiteral(int) => int.to_string(),
+            Expression::StringLiteral(string) => string.to_string(),
             Expression::Prefix(pre) => pre.to_string(),
             Expression::Infix(inf) => inf.to_string(),
             Expression::Boolean(boolean) => boolean.to_string(),
@@ -356,6 +371,7 @@ impl Parser {
         let mut left = match self.cur_token.token_type {
             lexer::TokenType::IDENT => self.parse_identifier_expression(),
             lexer::TokenType::INT => self.parse_integer_literal_expression()?,
+            lexer::TokenType::STRING => self.parse_string_literal_expression(),
             lexer::TokenType::BANG | lexer::TokenType::MINUS => self.parse_prefix_expression()?,
             lexer::TokenType::TRUE | lexer::TokenType::FALSE => self.parse_boolean_expression(),
             lexer::TokenType::LPAREN => self.parse_grouped_expression()?,
@@ -482,6 +498,12 @@ impl Parser {
                 None
             }
         }
+    }
+
+    fn parse_string_literal_expression(&mut self) -> Expression {
+        let token = self.cur_token.clone();
+        let literal = token.literal.to_string();
+        Expression::StringLiteral(StringLiteral{ token, value: literal })
     }
 
     fn parse_prefix_expression(&mut self) -> Option<Expression> {
@@ -938,5 +960,15 @@ mod tests {
         let program = parser.parse();
         check_parse_errors(parser);
         assert_eq!(fn_str.1, &program.to_string());
+    }
+
+    #[test]
+    fn test_parse_string_literal_expression() {
+        let fn_str = "\"hello world\";";
+        let lexer = lexer::Lexer::new(&fn_str);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parse_errors(parser);
+        assert_eq!(fn_str, &program.to_string());
     }
 }
