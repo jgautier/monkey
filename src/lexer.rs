@@ -28,6 +28,8 @@ pub enum TokenType {
     RPAREN,
     LBRACE,
     RBRACE,
+    LBRACKET,
+    RBRACKET,
     
     // Keywords
     FUNCTION,
@@ -59,7 +61,6 @@ impl fmt::Display for Token {
 impl Token {
     pub fn from_chr(chr: &str) -> Option<Self> {
         let t = match chr {
-            "0" => TokenType::EOF,
             //"IDENT" => TokenType::IDENT,
             //"INT" => TokenType::INT,
             "=" => TokenType::ASSIGN,
@@ -76,6 +77,8 @@ impl Token {
             ")" => TokenType::RPAREN,
             "{" => TokenType::LBRACE,
             "}" => TokenType::RBRACE,
+            "[" => TokenType::LBRACKET,
+            "]" => TokenType::RBRACKET,
             _ => {
                 return None
             }
@@ -242,6 +245,8 @@ mod tests {
             10 != 9;
             \"foobar\";
             \"foo bar\";
+            [1, 2];
+            [1, 2][0];
         ";
         let mut lexer = Lexer::new(&INPUT);
         assert_eq!(TokenType::LET, lexer.next().unwrap().token_type);
@@ -355,6 +360,23 @@ mod tests {
         assert_eq!(TokenType::STRING, foo_bar.token_type);
         assert_eq!("foo bar", foo_bar.literal);
         assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::LBRACKET, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::INT, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::COMMA, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::INT, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::RBRACKET, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
+        
+        assert_eq!(TokenType::LBRACKET, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::INT, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::COMMA, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::INT, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::RBRACKET, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::LBRACKET, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::INT, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::RBRACKET, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
+
         assert_eq!(TokenType::EOF, lexer.next().unwrap().token_type);
         assert_eq!(None, lexer.next());
     }

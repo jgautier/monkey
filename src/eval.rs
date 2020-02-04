@@ -18,6 +18,7 @@ pub enum ObjectType {
   Return(Box<ObjectType>),
   Function(Function),
   BuiltIn(BuiltIn),
+  Array(Array),
   Error(String)
 }
 
@@ -48,6 +49,9 @@ impl Object for ObjectType {
       ObjectType::BuiltIn(_) => {
         "BUILTIN".to_string()
       },
+      ObjectType::Array(_) => {
+        "ARRAY".to_string()
+      }
     }
   }
   fn inspect(&self) -> String {
@@ -82,6 +86,10 @@ impl Object for ObjectType {
       ObjectType::BuiltIn(_) => {
         "builtin function".to_string()
       }
+      ObjectType::Array(arr) => {
+        let els = arr.elements.clone().into_iter().map(|el| el.inspect()).collect::<Vec<String>>().join(",");
+        format!("[{}]", els)
+      }
     }
   }
 }
@@ -108,6 +116,11 @@ pub struct Function {
   params: Vec<ast::Identifier>,
   body: ast::BlockStatement,
   env: Rc<RefCell<Environment>>
+}
+
+#[derive(Debug, Clone)]
+pub struct Array {
+  elements: Vec<ObjectType>
 }
 
 #[derive(Debug)]
@@ -186,6 +199,31 @@ impl Evaluator {
   }
   fn eval_expression(&self, expr: ast::Expression, env: &Rc<RefCell<Environment>>) -> ObjectType {
     match expr {
+      ast::Expression::Index(expr) => {
+        let left = self.eval_expression(*expr.left, env);
+        if let ObjectType::Error(_) = left {
+          return left
+        }
+        let index = self.eval_expression(*expr.index, env);
+        if let ObjectType::Error(_) = index {
+          return index
+        }
+        match (&left, &index) {
+          (ObjectType::Array(left), ObjectType::Integer(index)) => {
+            match left.elements.get(index.value as usize) {
+              Some(obj) => {
+                obj.clone()
+              },
+              None => {
+                ObjectType::Null(Null {})
+              }
+            }
+          },
+          _ => {
+            ObjectType::Error(format!("Expecting ARRAY and INTEGER found {} and {}", left.object_type(), index.object_type()))
+          }
+        }
+      }
       ast::Expression::Infix(expr) => {
         let left = self.eval_expression(*expr.left, env);
         if let ObjectType::Error(_) = left {
@@ -228,6 +266,9 @@ impl Evaluator {
               }
               ObjectType::StringObj(s) => {
                 ObjectType::StringObj(StringObj { value: s.value })
+              }
+              ObjectType::Array(arr) => {
+                ObjectType::Array(Array { elements: arr.elements })
               }
               _ => {
                 ObjectType::Null(Null {})
@@ -299,6 +340,17 @@ impl Evaluator {
       },
       ast::Expression::StringLiteral(string) => {
         ObjectType::StringObj(StringObj{ value: string.value })
+      },
+      ast::Expression::ArrayLiteral(arr) => {
+        let mut elements = Vec::new();
+        for el in arr.elements {
+          let res = self.eval_expression(el, env);
+          if let ObjectType::Error(_) = res {
+            return res
+          }
+          elements.push(res);
+        }
+        ObjectType::Array(Array { elements })
       }
     }
   }
@@ -817,6 +869,50 @@ mod tests {
       let lexer = Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
 
+      let obj = Evaluator::new().eval_program(prog);
+      if let ObjectType::Integer(i) = obj {
+        assert_eq!(i.value, test.1);
+      } else {
+        println!("{}", obj.inspect());
+        assert_eq!(false, true)
+      }
+    }
+  }
+  #[test]
+  fn test_array_literal() {
+    let tests = vec![      
+      ("[1, 2 * 2,3 + 3]", vec!["1", "4", "6"]),
+    ];
+    for test in tests {
+      let lexer = Lexer::new(&test.0);
+      let prog = ast::Parser::new(lexer).parse();
+
+      let obj = Evaluator::new().eval_program(prog);
+      if let ObjectType::Array(arr) = obj {
+        for (i, num) in arr.elements.iter().enumerate() {
+          assert_eq!(num.inspect(), test.1[i]);
+        }
+      } else {
+        println!("{}", obj.inspect());
+        assert_eq!(false, true)
+      }
+    }
+  }
+  #[test]
+  fn test_array_index() {
+    let tests = vec![      
+      ("[1, 2, 3][0]", 1),
+      ("[1, 2, 3][1]", 2),
+      ("[1, 2, 3][2]", 3),
+      ("let i = 0; [1][i];", 1),
+      ("[1, 2, 3][1 + 1]", 3),
+      ("let myArray = [1, 2, 3]; myArray[2];", 3),
+      ("let myArray = [1, 2, 3]; myArray[0] + myArray[1] + myArray[2];", 6),
+      ("let myArray = [1, 2, 3]; let i = myArray[0]; i", 1)
+    ];
+    for test in tests {
+      let lexer = Lexer::new(&test.0);
+      let prog = ast::Parser::new(lexer).parse();
       let obj = Evaluator::new().eval_program(prog);
       if let ObjectType::Integer(i) = obj {
         assert_eq!(i.value, test.1);

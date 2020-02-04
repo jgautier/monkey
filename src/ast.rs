@@ -212,16 +212,48 @@ impl Node for Call {
 }
 
 #[derive(Clone, Debug)]
+pub struct ArrayLiteral {
+    pub elements: Vec<Expression>
+}
+
+impl Node for ArrayLiteral {
+    fn to_string(&self) -> String {
+        let mut strs = vec!["[".to_string()];
+        strs.push(self.elements.iter().map(|el| el.to_string()).collect::<Vec<String>>().join(", "));
+        strs.push("]".to_string());
+        strs.concat()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Index {
+    pub left: Box<Expression>,
+    pub index: Box<Expression>
+}
+
+impl Node for Index {
+    fn to_string(&self) -> String {
+        let mut strs = vec!["(".to_string()];
+        strs.push(self.left.to_string());
+        strs.push("[".to_string());
+        strs.push("])".to_string());
+        strs.concat()
+    }
+}
+
+#[derive(Clone, Debug)]
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
     StringLiteral(StringLiteral),
+    ArrayLiteral(ArrayLiteral),
     Prefix(Prefix),
     Infix(Infix),
     Boolean(Boolean),
     If(If),
     Fn(Fn),
-    Call(Call)
+    Call(Call),
+    Index(Index)
 }
 
 impl Node for Expression {
@@ -235,7 +267,9 @@ impl Node for Expression {
             Expression::Boolean(boolean) => boolean.to_string(),
             Expression::If(if_expr) => if_expr.to_string(),
             Expression::Fn(fn_expr) => fn_expr.to_string(),
-            Expression::Call(call_expr) => call_expr.to_string()
+            Expression::Call(call_expr) => call_expr.to_string(),
+            Expression::ArrayLiteral(arr_expr) => arr_expr.to_string(),
+            Expression::Index(index_expr) => index_expr.to_string()
         }
     }
 }
@@ -248,7 +282,8 @@ enum OperatorPrecedence {
     SUM,
     PRODUCT,
     PREFIX,
-    CALL
+    CALL,
+    LBRACKET
 }
 
 pub struct Parser {
@@ -270,7 +305,8 @@ impl Parser {
             lexer::TokenType::NEQ,
             lexer::TokenType::LT,
             lexer::TokenType::GT,
-            lexer::TokenType::LPAREN
+            lexer::TokenType::LPAREN,
+            lexer::TokenType::LBRACKET
         ].iter().cloned().collect();
         let cur_token = lexer.next().unwrap();
         let peek_token = lexer.next().unwrap();
@@ -377,6 +413,7 @@ impl Parser {
             lexer::TokenType::LPAREN => self.parse_grouped_expression()?,
             lexer::TokenType::IF => self.parse_if_expression()?,
             lexer::TokenType::FUNCTION => self.parse_fn_expression()?,
+            lexer::TokenType::LBRACKET => Expression::ArrayLiteral(ArrayLiteral{elements: self.parse_expression_list(lexer::TokenType::RBRACKET)}),
             _=> return None
         };
         while self.peek_token.token_type != lexer::TokenType::SEMICOLON && precedence < self.peek_precedence() {
@@ -518,9 +555,9 @@ impl Parser {
         }
     }
 
-    fn parse_call_arguments(&mut self) -> Vec<Expression> {
+    fn parse_expression_list(&mut self, end: lexer::TokenType) -> Vec<Expression> {
         let mut args = Vec::new();
-        if self.peek_token.token_type == lexer::TokenType::RPAREN {
+        if self.peek_token.token_type == end {
             self.next_token();
             return args;
         }
@@ -534,7 +571,7 @@ impl Parser {
             args.push(self.parse_expression(OperatorPrecedence::LOWEST).unwrap());
         }
 
-        if !self.expect_peek(lexer::TokenType::RPAREN) {
+        if !self.expect_peek(end) {
             return args;
         }
 
@@ -542,19 +579,31 @@ impl Parser {
     }
 
     fn parse_call_expression(&mut self, function: Expression) -> Option<Expression> {
-        Some(Expression::Call(Call { token: self.cur_token.clone(), function: Box::new(function), args: self.parse_call_arguments() }))
+        Some(Expression::Call(Call { token: self.cur_token.clone(), function: Box::new(function), args: self.parse_expression_list(lexer::TokenType::RPAREN) }))
     }
 
     fn parse_infix_expression(&mut self, left: Expression) -> Option<Expression> {
         if self.cur_token.token_type == lexer::TokenType::LPAREN {
             return self.parse_call_expression(left);
         }
+        if self.cur_token.token_type == lexer::TokenType::LBRACKET {
+            self.next_token();
+            let index_expr = Some(Expression::Index(Index{ left: Box::new(left), index: Box::new(self.parse_expression(OperatorPrecedence::LOWEST)?)}));
+            self.next_token();
+            if self.cur_token.token_type != lexer::TokenType::RBRACKET {
+                return None;
+            } else {
+                return index_expr;
+            }
+        }
         let token = self.cur_token.clone();
         let operator = token.clone().literal;
         let precedence = self.cur_precedence();
         self.next_token();
         match self.parse_expression(precedence) {
-            Some(expr) => Some(Expression::Infix(Infix{ token, left: Box::new(left), operator, right: Box::new(expr) })),
+            Some(expr) => {
+                Some(Expression::Infix(Infix{ token, left: Box::new(left), operator, right: Box::new(expr) }))
+            },
             None => None
         }
     }
@@ -579,6 +628,7 @@ impl Parser {
             lexer::TokenType::SLASH => OperatorPrecedence::PRODUCT,
             lexer::TokenType::ASTERISK => OperatorPrecedence::PRODUCT,
             lexer::TokenType::LPAREN => OperatorPrecedence::CALL,
+            lexer::TokenType::LBRACKET => OperatorPrecedence::LBRACKET,
             _=> OperatorPrecedence::LOWEST
         }
     }
@@ -857,6 +907,36 @@ mod tests {
     }
 
     #[test]
+     fn test_parse_index_expression() {
+        let expressions = vec![
+           ("myArray[1 + 1]", "myArray", "(1 + 1)"),
+           ("[1 + 1][0]", "[(1 + 1)]", "0")
+        ];
+
+        for expression in expressions {
+            let lexer = lexer::Lexer::new(&expression.0);
+            let mut parser = Parser::new(lexer);
+            let program = parser.parse();
+            check_parse_errors(parser);
+            assert_eq!(program.statements.len(), 1);
+            match &program.statements[0] {
+                StatementType::Expression(stmt) => {
+                    match &stmt.expr {
+                        Expression::Index(expr) => {
+                            assert_eq!(expr.left.to_string(), expression.1);
+                            assert_eq!(expr.index.to_string(), expression.2);                            
+                        }
+                        _ => {
+                            panic!("wrong expression type")
+                        }
+                    }              
+                },
+                _ => panic!("wrong statement type")
+            }
+        }
+    }
+
+    #[test]
     fn test_operator_precedence() {
         let test_strings = vec![(
             "1 + (2 + 3) + 4",
@@ -965,6 +1045,15 @@ mod tests {
     #[test]
     fn test_parse_string_literal_expression() {
         let fn_str = "\"hello world\";";
+        let lexer = lexer::Lexer::new(&fn_str);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parse_errors(parser);
+        assert_eq!(fn_str, &program.to_string());
+    }
+    #[test]
+    fn test_parse_array_literal_expression() {
+        let fn_str = "[1, (2 * 2), (3 + 3)]";
         let lexer = lexer::Lexer::new(&fn_str);
         let mut parser = Parser::new(lexer);
         let program = parser.parse();

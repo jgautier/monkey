@@ -28,14 +28,7 @@ fn start() {
                         }
                     } else {
                         let result = evaluator.eval_program(program);
-                        match result {
-                            eval::ObjectType::Null(_) => {
-
-                            },
-                            _ => {
-                                println!("{}", result.inspect());
-                            }
-                        }
+                        println!("{}", result.inspect());
                     }
                 }
                 print_prompt();
