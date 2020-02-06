@@ -169,10 +169,82 @@ impl Evaluator {
         if args.len() > 1 {
           return ObjectType::Error(format!("Expected 1 argument got {}", args.len()));
         }
-        if let ObjectType::StringObj(string) = &args[0] {
-          ObjectType::Integer(Integer { value: string.value.len() as i64 })
-        } else {
-          ObjectType::Error(format!("Expected a String got a {}", args[0].object_type()))
+        match &args[0] {
+          ObjectType::StringObj(string) => {
+            ObjectType::Integer(Integer { value: string.value.len() as i64 })
+          },
+          ObjectType::Array(arr) => {
+            ObjectType::Integer(Integer { value: arr.elements.len() as i64 })
+          },
+          _=> {
+            ObjectType::Error(format!("Expected a String or Array got a {}", args[0].object_type()))
+          }
+        }
+      }
+    }));
+    built_ins.insert("first".to_string(), ObjectType::BuiltIn(BuiltIn {
+      function: |args: Vec<ObjectType>| -> ObjectType {
+        if args.len() > 1 {
+          return ObjectType::Error(format!("Expected 1 argument got {}", args.len()));
+        }
+        match &args[0] {
+          ObjectType::Array(arr) => {
+            arr.elements[0].clone()
+          },
+          _=> {
+            ObjectType::Error(format!("Expected a Array got a {}", args[0].object_type()))
+          }
+        }
+      }
+    }));
+    built_ins.insert("last".to_string(), ObjectType::BuiltIn(BuiltIn {
+      function: |args: Vec<ObjectType>| -> ObjectType {
+        if args.len() > 1 {
+          return ObjectType::Error(format!("Expected 1 argument got {}", args.len()));
+        }
+        match &args[0] {
+          ObjectType::Array(arr) => {
+            arr.elements.last().unwrap_or_else(|| &ObjectType::Null(Null{})).clone()
+          },
+          _=> {
+            ObjectType::Error(format!("Expected a Array got a {}", args[0].object_type()))
+          }
+        }
+      }
+    }));
+    built_ins.insert("rest".to_string(), ObjectType::BuiltIn(BuiltIn {
+      function: |args: Vec<ObjectType>| -> ObjectType {
+        if args.len() > 1 {
+          return ObjectType::Error(format!("Expected 1 argument got {}", args.len()));
+        }
+        match &args[0] {
+          ObjectType::Array(arr) => {
+            if let Some((_, elements)) = arr.elements.split_first() {
+              ObjectType::Array(Array {elements: elements.to_vec()})
+            } else {
+              ObjectType::Null(Null{})
+            }
+          },
+          _=> {
+            ObjectType::Error(format!("Expected a Array got a {}", args[0].object_type()))
+          }
+        }
+      }
+    }));
+    built_ins.insert("push".to_string(), ObjectType::BuiltIn(BuiltIn {
+      function: |args: Vec<ObjectType>| -> ObjectType {
+        if args.len() > 2 {
+          return ObjectType::Error(format!("Expected 2 argument got {}", args.len()));
+        }
+        match &args[0] {
+          ObjectType::Array(arr) => {
+            let mut new_arr = arr.elements.to_vec();
+            new_arr.push(args[1].clone());
+            ObjectType::Array(Array {elements: new_arr})
+          },
+          _=> {
+            ObjectType::Error(format!("Expected a Array got a {}", args[0].object_type()))
+          }
         }
       }
     }));
@@ -863,7 +935,8 @@ mod tests {
     let tests = vec![      
       ("len(\"\")", 0),
       ("len(\"four\")", 4),
-      ("len(\"fourfourfourfour\")", 16)
+      ("len(\"fourfourfourfour\")", 16),
+      ("len([1,2,3,4])", 4)
     ];
     for test in tests {
       let lexer = Lexer::new(&test.0);
@@ -916,6 +989,94 @@ mod tests {
       let obj = Evaluator::new().eval_program(prog);
       if let ObjectType::Integer(i) = obj {
         assert_eq!(i.value, test.1);
+      } else {
+        println!("{}", obj.inspect());
+        assert_eq!(false, true)
+      }
+    }
+  }
+  #[test]
+  fn test_first() {
+    let tests = vec![      
+      ("first([1])", 1)
+    ];
+    for test in tests {
+      let lexer = Lexer::new(&test.0);
+      let prog = ast::Parser::new(lexer).parse();
+
+      let obj = Evaluator::new().eval_program(prog);
+      if let ObjectType::Integer(i) = obj {
+        assert_eq!(i.value, test.1);
+      } else {
+        println!("{}", obj.inspect());
+        assert_eq!(false, true)
+      }
+    }
+  }
+  #[test]
+  fn test_last() {
+    let tests = vec![      
+      ("last([1, 2])", 2)
+    ];
+    for test in tests {
+      let lexer = Lexer::new(&test.0);
+      let prog = ast::Parser::new(lexer).parse();
+
+      let obj = Evaluator::new().eval_program(prog);
+      if let ObjectType::Integer(i) = obj {
+        assert_eq!(i.value, test.1);
+      } else {
+        println!("{}", obj.inspect());
+        assert_eq!(false, true)
+      }
+    }
+  }
+  #[test]
+  fn test_rest() {
+    let tests = vec![      
+      ("rest([1, 2, 3])", vec![2, 3])
+    ];
+    for test in tests {
+      let lexer = Lexer::new(&test.0);
+      let prog = ast::Parser::new(lexer).parse();
+
+      let obj = Evaluator::new().eval_program(prog);
+      if let ObjectType::Array(arr) = obj {
+        match (arr.elements[0].clone(), arr.elements[1].clone()) { 
+          (ObjectType::Integer(i1), ObjectType::Integer(i2)) => {
+            assert_eq!(i1.value, test.1[0]);
+            assert_eq!(i2.value, test.1[1]);
+          },
+          _=> {
+            assert_eq!(false, true)
+          }
+        }
+      } else {
+        println!("{}", obj.inspect());
+        assert_eq!(false, true)
+      }
+    }
+  }
+  #[test]
+  fn test_push() {
+    let tests = vec![      
+      ("push([1], 2)", vec![1, 2])
+    ];
+    for test in tests {
+      let lexer = Lexer::new(&test.0);
+      let prog = ast::Parser::new(lexer).parse();
+
+      let obj = Evaluator::new().eval_program(prog);
+      if let ObjectType::Array(arr) = obj {
+        match (arr.elements[0].clone(), arr.elements[1].clone()) { 
+          (ObjectType::Integer(i1), ObjectType::Integer(i2)) => {
+            assert_eq!(i1.value, test.1[0]);
+            assert_eq!(i2.value, test.1[1]);
+          },
+          _=> {
+            assert_eq!(false, true)
+          }
+        }
       } else {
         println!("{}", obj.inspect());
         assert_eq!(false, true)
