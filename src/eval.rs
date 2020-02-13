@@ -423,6 +423,9 @@ impl Evaluator {
           elements.push(res);
         }
         ObjectType::Array(Array { elements })
+      },
+      ast::Expression::HashLiteral(_) => {
+        ObjectType::Null(Null {})
       }
     }
   }

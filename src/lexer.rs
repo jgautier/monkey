@@ -30,6 +30,7 @@ pub enum TokenType {
     RBRACE,
     LBRACKET,
     RBRACKET,
+    COLON,
     
     // Keywords
     FUNCTION,
@@ -46,7 +47,7 @@ impl fmt::Display for TokenType {
         write!(f, "{:?}", self)
     }
 }
-#[derive(Clone,PartialEq,Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, Hash)]
 pub struct Token {
     pub token_type: TokenType,
     pub literal: String
@@ -79,6 +80,7 @@ impl Token {
             "}" => TokenType::RBRACE,
             "[" => TokenType::LBRACKET,
             "]" => TokenType::RBRACKET,
+            ":" => TokenType::COLON,
             _ => {
                 return None
             }
@@ -247,6 +249,7 @@ mod tests {
             \"foo bar\";
             [1, 2];
             [1, 2][0];
+            {\"foo\": \"bar\"};
         ";
         let mut lexer = Lexer::new(&INPUT);
         assert_eq!(TokenType::LET, lexer.next().unwrap().token_type);
@@ -375,6 +378,13 @@ mod tests {
         assert_eq!(TokenType::LBRACKET, lexer.next().unwrap().token_type);
         assert_eq!(TokenType::INT, lexer.next().unwrap().token_type);
         assert_eq!(TokenType::RBRACKET, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
+
+        assert_eq!(TokenType::LBRACE, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::STRING, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::COLON, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::STRING, lexer.next().unwrap().token_type);
+        assert_eq!(TokenType::RBRACE, lexer.next().unwrap().token_type);
         assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
 
         assert_eq!(TokenType::EOF, lexer.next().unwrap().token_type);

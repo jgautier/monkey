@@ -1,10 +1,13 @@
 use crate::lexer;
 use std::collections::HashSet;
+use indexmap::map::IndexMap;
+use std::hash::{Hash, Hasher};
+
 pub trait Node {
     fn to_string(&self) -> String;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StatementType {
     Let(LetStatement),
     Return(ReturnStatement),
@@ -32,7 +35,7 @@ impl Node for Program {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Identifier {
     pub token: lexer::Token
 }
@@ -43,7 +46,7 @@ impl Node for Identifier {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct LetStatement {
     token: lexer::Token,
     pub name: Identifier,
@@ -56,7 +59,7 @@ impl Node for LetStatement {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ReturnStatement {
     token: lexer::Token,
     pub value: Box<Expression> 
@@ -68,7 +71,7 @@ impl Node for ReturnStatement {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ExpressionStatement {
     token: lexer::Token,
     pub expr: Expression
@@ -79,7 +82,7 @@ impl Node for ExpressionStatement {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IntegerLiteral {
     token: lexer::Token,
     pub value: i64
@@ -91,7 +94,7 @@ impl Node for IntegerLiteral {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct StringLiteral {
     token: lexer::Token,
     pub value: String
@@ -99,12 +102,12 @@ pub struct StringLiteral {
 
 impl Node for StringLiteral {
     fn to_string(&self) -> String {
-        format!("\"{}\";", self.value)
+        format!("\"{}\"", self.value)
     }
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Prefix {
     token: lexer::Token,
     pub operator: String,
@@ -117,7 +120,7 @@ impl Node for Prefix {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Infix {
     token: lexer::Token,
     pub operator: String,
@@ -131,7 +134,7 @@ impl Node for Infix {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Boolean {
     token: lexer::Token,
     pub value: bool
@@ -141,7 +144,7 @@ impl Node for Boolean {
         format!("{}", self.value)
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BlockStatement {
     token: lexer::Token,
     pub statements: Vec<StatementType>
@@ -153,7 +156,7 @@ impl Node for BlockStatement {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct If {
     token: lexer::Token,
     pub condition: Box<Expression>,
@@ -177,7 +180,7 @@ impl Node for If {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Fn {
     token: lexer::Token,
     pub params: Vec<Identifier>,
@@ -194,7 +197,7 @@ impl Node for Fn {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Call {
     token: lexer::Token,
     pub function: Box<Expression>,
@@ -211,7 +214,7 @@ impl Node for Call {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ArrayLiteral {
     pub elements: Vec<Expression>
 }
@@ -225,7 +228,33 @@ impl Node for ArrayLiteral {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
+pub struct HashLiteral {
+    pub pairs: IndexMap<Expression, Expression>
+}
+
+impl Hash for HashLiteral {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.to_string().hash(state);
+    }
+}
+
+impl PartialEq for HashLiteral {
+    fn eq(&self, other: &HashLiteral) -> bool {
+        self.to_string() == other.to_string()
+    }
+}
+
+impl Node for HashLiteral {
+    fn to_string(&self) -> String {
+        let mut strs = vec!["{".to_string()];
+        strs.push(self.pairs.iter().map(|pair| format!("{}: {}", pair.0.to_string(), pair.1.to_string())).collect::<Vec<String>>().join(", "));
+        strs.push("}".to_string());
+        strs.concat()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Index {
     pub left: Box<Expression>,
     pub index: Box<Expression>
@@ -241,12 +270,13 @@ impl Node for Index {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral(IntegerLiteral),
     StringLiteral(StringLiteral),
     ArrayLiteral(ArrayLiteral),
+    HashLiteral(HashLiteral),
     Prefix(Prefix),
     Infix(Infix),
     Boolean(Boolean),
@@ -269,7 +299,8 @@ impl Node for Expression {
             Expression::Fn(fn_expr) => fn_expr.to_string(),
             Expression::Call(call_expr) => call_expr.to_string(),
             Expression::ArrayLiteral(arr_expr) => arr_expr.to_string(),
-            Expression::Index(index_expr) => index_expr.to_string()
+            Expression::Index(index_expr) => index_expr.to_string(),
+            Expression::HashLiteral(hash) => hash.to_string()
         }
     }
 }
@@ -414,6 +445,7 @@ impl Parser {
             lexer::TokenType::IF => self.parse_if_expression()?,
             lexer::TokenType::FUNCTION => self.parse_fn_expression()?,
             lexer::TokenType::LBRACKET => Expression::ArrayLiteral(ArrayLiteral{elements: self.parse_expression_list(lexer::TokenType::RBRACKET)}),
+            lexer::TokenType::LBRACE => self.parse_hash_literal_expression()?,
             _=> return None
         };
         while self.peek_token.token_type != lexer::TokenType::SEMICOLON && precedence < self.peek_precedence() {
@@ -576,6 +608,27 @@ impl Parser {
         }
 
         args
+    }
+
+    fn parse_hash_literal_expression(&mut self) -> Option<Expression> {
+        let mut pairs = IndexMap::new();
+        while self.peek_token.token_type != lexer::TokenType::RBRACE {
+            self.next_token();
+            let key = self.parse_expression(OperatorPrecedence::LOWEST)?;
+            if !self.expect_peek(lexer::TokenType::COLON) {
+                return None
+            }
+            self.next_token();
+            let value = self.parse_expression(OperatorPrecedence::LOWEST)?;
+            pairs.insert(key, value);
+            if self.peek_token.token_type != lexer::TokenType::RBRACE && !self.expect_peek(lexer::TokenType::COMMA) {
+                return None
+            }
+        }
+        if !self.expect_peek(lexer::TokenType::RBRACE) {
+            return None
+        }
+        Some(Expression::HashLiteral(HashLiteral{ pairs }))
     }
 
     fn parse_call_expression(&mut self, function: Expression) -> Option<Expression> {
@@ -1044,7 +1097,7 @@ mod tests {
 
     #[test]
     fn test_parse_string_literal_expression() {
-        let fn_str = "\"hello world\";";
+        let fn_str = "\"hello world\"";
         let lexer = lexer::Lexer::new(&fn_str);
         let mut parser = Parser::new(lexer);
         let program = parser.parse();
@@ -1054,6 +1107,15 @@ mod tests {
     #[test]
     fn test_parse_array_literal_expression() {
         let fn_str = "[1, (2 * 2), (3 + 3)]";
+        let lexer = lexer::Lexer::new(&fn_str);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parse_errors(parser);
+        assert_eq!(fn_str, &program.to_string());
+    }
+    #[test]
+    fn test_parse_hash_literal_string_keys() {
+        let fn_str = "{\"one\": 1, \"two\": 2, \"three\": 3}";
         let lexer = lexer::Lexer::new(&fn_str);
         let mut parser = Parser::new(lexer);
         let program = parser.parse();
