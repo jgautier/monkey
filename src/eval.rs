@@ -9,6 +9,42 @@ pub trait Object {
   fn inspect(&self) -> String;
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum HashKey {
+  Integer(Integer),
+  StringObj(StringObj),
+  Boolean(Boolean)
+}
+
+impl Object for HashKey {
+  fn object_type(&self) -> String {
+    match self {
+      HashKey::Integer(_) => {
+        "INTEGER".to_string()
+      },
+      HashKey::Boolean(_) => {
+        "BOOLEAN".to_string()
+      },
+      HashKey::StringObj(_) => {
+        "STRING".to_string()
+      }
+    }
+  }
+  fn inspect(&self) -> String {
+    match self {
+      HashKey::Integer(i) => {
+        format!("{}", i.value)
+      }
+      HashKey::Boolean(b) => {
+        format!("{}", b.value)
+      }
+      HashKey::StringObj(string) => {
+        string.value.to_string()
+      }
+    }
+  }
+}
+
 #[derive(Debug, Clone)]
 pub enum ObjectType {
   Integer(Integer),
@@ -19,6 +55,7 @@ pub enum ObjectType {
   Function(Function),
   BuiltIn(BuiltIn),
   Array(Array),
+  Hash(Hash),
   Error(String)
 }
 
@@ -51,6 +88,9 @@ impl Object for ObjectType {
       },
       ObjectType::Array(_) => {
         "ARRAY".to_string()
+      },
+      ObjectType::Hash(_) => {
+        "HASH".to_string()
       }
     }
   }
@@ -90,25 +130,29 @@ impl Object for ObjectType {
         let els = arr.elements.clone().into_iter().map(|el| el.inspect()).collect::<Vec<String>>().join(",");
         format!("[{}]", els)
       }
+      ObjectType::Hash(hash) => {
+        let pairs = hash.pairs.clone().into_iter().map(|pair| format!("{}: {}", pair.0.inspect(), pair.1.inspect())).collect::<Vec<String>>().join(", ");
+        format!("{{{}}}", pairs)
+      }
     }
   }
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct Integer {
   value: i64
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct StringObj {
   value: String
 }
 
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct Boolean {
   value: bool
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Null {}
 
 #[derive(Debug, Clone)]
@@ -121,6 +165,11 @@ pub struct Function {
 #[derive(Debug, Clone)]
 pub struct Array {
   elements: Vec<ObjectType>
+}
+
+#[derive(Debug, Clone)]
+pub struct Hash {
+  pairs: HashMap<HashKey, ObjectType>
 }
 
 #[derive(Debug)]
@@ -151,7 +200,7 @@ impl Environment {
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BuiltIn {
   function: fn(Vec<ObjectType>) -> ObjectType
 }
@@ -248,6 +297,14 @@ impl Evaluator {
         }
       }
     }));
+    built_ins.insert("puts".to_string(), ObjectType::BuiltIn(BuiltIn {
+      function: |args: Vec<ObjectType>| -> ObjectType {
+        for arg in args {
+          println!("{}", arg.inspect())
+        }
+        ObjectType::Null(Null {})
+      }
+    }));
     Self {
       env: Rc::new(RefCell::new(Environment::new(None))),
       built_ins
@@ -283,6 +340,36 @@ impl Evaluator {
         match (&left, &index) {
           (ObjectType::Array(left), ObjectType::Integer(index)) => {
             match left.elements.get(index.value as usize) {
+              Some(obj) => {
+                obj.clone()
+              },
+              None => {
+                ObjectType::Null(Null {})
+              }
+            }
+          },
+          (ObjectType::Hash(left), ObjectType::Integer(i)) => {
+            match left.pairs.get(&HashKey::Integer(Integer { value: i.value })) {
+              Some(obj) => {
+                obj.clone()
+              },
+              None => {
+                ObjectType::Null(Null {})
+              }
+            }
+          },
+          (ObjectType::Hash(left), ObjectType::StringObj(str_obj)) => {
+            match left.pairs.get(&HashKey::StringObj(StringObj { value: str_obj.value.to_string() })) {
+              Some(obj) => {
+                obj.clone()
+              },
+              None => {
+                ObjectType::Null(Null {})
+              }
+            }
+          },
+          (ObjectType::Hash(left), ObjectType::Boolean(boolean)) => {
+            match left.pairs.get(&HashKey::Boolean(Boolean { value: boolean.value })) {
               Some(obj) => {
                 obj.clone()
               },
@@ -341,6 +428,9 @@ impl Evaluator {
               }
               ObjectType::Array(arr) => {
                 ObjectType::Array(Array { elements: arr.elements })
+              }
+              ObjectType::Hash(hash) => {
+                ObjectType::Hash(Hash { pairs: hash.pairs })
               }
               _ => {
                 ObjectType::Null(Null {})
@@ -424,8 +514,34 @@ impl Evaluator {
         }
         ObjectType::Array(Array { elements })
       },
-      ast::Expression::HashLiteral(_) => {
-        ObjectType::Null(Null {})
+      ast::Expression::HashLiteral(hash) => {
+        let mut pairs = HashMap::new();
+        for pair in hash.pairs.into_iter() {
+          let key = self.eval_expression(pair.0, env);
+          let hash_key = match key {
+            ObjectType::StringObj(str_obj) => {
+              HashKey::StringObj(str_obj)
+            }
+            ObjectType::Integer(int) => {
+              HashKey::Integer(int)
+            }
+            ObjectType::Boolean(boolean) => {
+              HashKey::Boolean(boolean)
+            }
+            ObjectType::Error(_) => {
+              return key.clone()
+            }
+            _ => {
+              return ObjectType::Error("Wrong type for hash key, must be string, integer or boolean".to_string())
+            }
+          };
+          let value = self.eval_expression(pair.1, env);
+          if let ObjectType::Error(_) = value {
+            return value
+          }
+          pairs.insert(hash_key, value);
+        }
+        ObjectType::Hash(Hash{ pairs })
       }
     }
   }
@@ -1068,7 +1184,6 @@ mod tests {
     for test in tests {
       let lexer = Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
-
       let obj = Evaluator::new().eval_program(prog);
       if let ObjectType::Array(arr) = obj {
         match (arr.elements[0].clone(), arr.elements[1].clone()) { 
@@ -1080,6 +1195,108 @@ mod tests {
             assert_eq!(false, true)
           }
         }
+      } else {
+        println!("{}", obj.inspect());
+        assert_eq!(false, true)
+      }
+    }
+  }
+  #[test]
+  fn test_string_hash_literal() {
+    let input = "
+      let two = \"two\";
+      {
+           \"one\": 10 - 9,
+           two: 1 + 1,
+           \"thr\" + \"ee\": 6 / 2,
+      }";
+    let test_values = vec![
+      ("one", 1),
+      ("two", 2),
+      ("three", 3)
+    ];
+    let lexer = Lexer::new(input);
+    let prog = ast::Parser::new(lexer).parse();
+    let obj = Evaluator::new().eval_program(prog);
+    if let ObjectType::Hash(hash) = obj {
+      for test in test_values {
+        let value = hash.pairs.get(&HashKey::StringObj(StringObj{ value: test.0.to_string()})).unwrap();
+        if let ObjectType::Integer(i) = value {
+          assert_eq!(i.value, test.1)
+        }
+      }
+    } else {
+      println!("{}", obj.inspect());
+      assert_eq!(false, true)
+    }
+  }
+  #[test]
+  fn test_int_hash_literal() {
+    let input = "
+      let two = 2;
+      {
+           1: 10 - 9,
+           two: 1 + 1,
+           3: 6 / 2,
+      }";
+    let test_values = vec![
+      (1, 1),
+      (2, 2),
+      (3, 3)
+    ];
+    let lexer = Lexer::new(input);
+    let prog = ast::Parser::new(lexer).parse();
+    let obj = Evaluator::new().eval_program(prog);
+    if let ObjectType::Hash(hash) = obj {
+      for test in test_values {
+        let value = hash.pairs.get(&HashKey::Integer(Integer{ value: test.0})).unwrap();
+        if let ObjectType::Integer(i) = value {
+          assert_eq!(i.value, test.1)
+        }
+      }
+    } else {
+      println!("{}", obj.inspect());
+      assert_eq!(false, true)
+    }
+  }
+  #[test]
+  fn test_bool_hash_literal() {
+    let input = "
+      {
+           true: 1,
+           false: 2,
+      }";
+    let test_values = vec![
+      (true, 1),
+      (false, 2)
+    ];
+    let lexer = Lexer::new(input);
+    let prog = ast::Parser::new(lexer).parse();
+    let obj = Evaluator::new().eval_program(prog);
+    if let ObjectType::Hash(hash) = obj {
+      for test in test_values {
+        let value = hash.pairs.get(&HashKey::Boolean(Boolean{ value: test.0})).unwrap();
+        if let ObjectType::Integer(i) = value {
+          assert_eq!(i.value, test.1)
+        }
+      }
+    } else {
+      println!("{}", obj.inspect());
+      assert_eq!(false, true)
+    }
+  }
+  #[test]
+  fn test_hash_index() {
+    let tests = vec![      
+      ("{\"foo\": 5}[\"foo\"]", 5),
+      ("let five = { \"five\": 5 }; five[\"five\"]", 5)
+    ];
+    for test in tests {
+      let lexer = Lexer::new(&test.0);
+      let prog = ast::Parser::new(lexer).parse();
+      let obj = Evaluator::new().eval_program(prog);
+      if let ObjectType::Integer(i) = obj {
+        assert_eq!(i.value, test.1);     
       } else {
         println!("{}", obj.inspect());
         assert_eq!(false, true)
