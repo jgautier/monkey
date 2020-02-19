@@ -134,12 +134,91 @@ impl Lexer {
         }
     }
 
+    pub fn get_curr_char(&mut self) -> Option<char> {
+        self.input.get(self.cur_index..)?.chars().next()
+    }
+
     pub fn skip_whitespace(&mut self) {
-        for (_, chr) in self.input[self.cur_index..].char_indices() {
-            if !chr.is_whitespace() {
-                break;
-            }
+        if let Some(i) = self.input[self.cur_index..].find(|c: char| !c.is_whitespace()) {
+            self.cur_index += i
+        } else {
+            self.cur_index = self.input.len()
+        }
+    }
+
+    pub fn find_two_char_token(&mut self) -> Option<Token> {
+        if self.cur_index + 2 < self.input.len() {
+            let chars = &self.input[self.cur_index..self.cur_index + 2];
+            let token = Token::from_two_chars(chars)?;
+            self.cur_index += 2;
+            Some(token)
+        } else {
+            None
+        }
+    }
+
+    pub fn find_one_char_token(&mut self) -> Option<Token> {
+        let chr = &self.input[self.cur_index..=self.cur_index];
+        let token = Token::from_chr(chr)?;
+        self.cur_index += 1;
+        Some(token)
+    }
+
+    pub fn check_done(&mut self) -> bool {
+        self.cur_index > self.input.len()
+    }
+
+    pub fn find_eof(&mut self) -> Option<Token> {
+        if self.cur_index == self.input.len() {
             self.cur_index += 1;
+            Some(Token {
+                token_type: TokenType::EOF,
+                literal: "EOF".to_string()
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn find_identifier(&mut self) -> Option<Token> {
+        let chr = self.get_curr_char()?;
+        if chr.is_alphabetic() || chr == '_' {
+            let i = self.input[self.cur_index..].find(|c: char| !c.is_alphanumeric()).unwrap_or_else(|| self.input.len() - self.cur_index);
+            let token = Token::from_identifier(&self.input[self.cur_index..self.cur_index + i]);
+            self.cur_index += i;
+            token
+        } else {
+            None
+        }
+    }
+
+    pub fn find_numeric_literal(&mut self) -> Option<Token> {
+        let chr = self.get_curr_char()?;
+        if chr.is_numeric() {
+            let i = self.input[self.cur_index..].find(|c: char| !c.is_numeric()).unwrap_or_else(|| self.input.len() - self.cur_index);
+            let token = Some(Token {
+                token_type: TokenType::INT,
+                literal: self.input[self.cur_index..self.cur_index + i].to_string()
+            });
+            self.cur_index += i;
+            token
+        } else {
+            None
+        }
+    }
+
+    pub fn find_string_literal(&mut self) -> Option<Token> {
+        let chr = self.get_curr_char()?;
+        if chr == '"' {
+            let i = self.input[self.cur_index +  1..].find(|c: char| c == '"').unwrap_or_else(|| self.input.len() - self.cur_index);
+            let token = Some(Token {
+                token_type: TokenType::STRING,
+                literal: self.input[self.cur_index + 1..=self.cur_index + i].to_string()
+            });
+            self.cur_index += i + 2;
+            token
+        } else {
+            None
         }
     }
 }
@@ -148,75 +227,18 @@ impl Iterator for Lexer {
     type Item = Token;
     
     fn next(&mut self) -> Option<Token> {
-        if self.cur_index > self.input.len() {
+        if self.check_done() {
             return None
         }
-        self.skip_whitespace();
-        if self.cur_index == self.input.len() {
-            self.cur_index += 1;
-            return Some(Token {
-                token_type: TokenType::EOF,
-                literal: "EOF".to_string()
-            })
-        }
 
-        if self.cur_index + 2 < self.input.len() {
-            let chars = &self.input[self.cur_index..self.cur_index + 2];
-            let token = Token::from_two_chars(chars);
-            if token.is_some() {
-                self.cur_index += 2;
-                return token;
-            }
-        }
-        let chr = &self.input[self.cur_index..=self.cur_index];
-        let token = Token::from_chr(chr);
-        match token {
-            None => {
-                // serach for string
-                // convert this to a chr so we can use the is_* methods
-                let chr = chr.chars().next().unwrap();
-                if chr.is_alphabetic() || chr == '_' {
-                    let next_index = match self.input[self.cur_index..].chars().position(|chr| !chr.is_alphabetic()) {
-                        Some(num) => num,
-                        _ => self.input.len() - self.cur_index
-                    };
-                    let token = Token::from_identifier(&self.input[self.cur_index..self.cur_index + next_index]);
-                    self.cur_index += next_index;
-                    token
-                } else if chr.is_numeric() {
-                    let next_index = match self.input[self.cur_index..].chars().position(|chr| !chr.is_numeric()) {
-                        Some(num) => num,
-                        _ => self.input.len() - self.cur_index
-                    };
-                    let token = Some(Token {
-                        token_type: TokenType::INT,
-                        literal: self.input[self.cur_index..self.cur_index + next_index].to_string()
-                    });
-                    self.cur_index += next_index;
-                    token
-                } else if chr == '"' {
-                    let next_index = match self.input[self.cur_index + 1..].chars().position(|chr| chr == '"') {
-                        Some(num) => num,
-                        _ => self.input.len() - self.cur_index
-                    };
-                    let token = Some(Token {
-                        token_type: TokenType::STRING,
-                        literal: self.input[self.cur_index + 1..=self.cur_index + next_index].to_string()
-                    });
-                    self.cur_index += next_index + 2;
-                    token
-                } else {
-                    Some(Token {
-                        token_type: TokenType::ILLEGAL,
-                        literal: "".to_string()
-                    })
-                }
-            },
-            Some(_) => {
-                self.cur_index += 1;
-                token
-            }
-        }
+        self.skip_whitespace();
+        self.find_eof()
+            .or_else(|| self.find_two_char_token())
+            .or_else(|| self.find_one_char_token())
+            .or_else(|| self.find_identifier())
+            .or_else(|| self.find_numeric_literal())
+            .or_else(|| self.find_string_literal())
+            .or_else(|| Some(Token { token_type: TokenType::ILLEGAL, literal: "".to_string() }))
     }
 }
 
