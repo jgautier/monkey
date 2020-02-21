@@ -567,7 +567,7 @@ impl Evaluator {
   fn eval_statement(&self, node: ast::StatementType, env: &Rc<RefCell<Environment>>) -> ObjectType {
     match node {
       ast::StatementType::Expression(expr) => {
-        self.eval_expression(expr.expr, env)
+        self.eval_expression(expr, env)
       },
       ast::StatementType::Return(value) => {
         let ret = self.eval_expression(value, env);

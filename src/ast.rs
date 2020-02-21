@@ -11,7 +11,7 @@ pub trait Node {
 pub enum StatementType {
     Let{ identifier: String, value: Expression },
     Return(Expression),
-    Expression(ExpressionStatement)
+    Expression(Expression)
 }
 
 impl Node for StatementType {
@@ -20,10 +20,9 @@ impl Node for StatementType {
             StatementType::Let{ identifier, value} => {
                 format!("let {} = {};\n", identifier.to_string(), value.to_string())
             },
-            StatementType::Return(expr) => {
+            StatementType::Return(expr) | StatementType::Expression(expr) => {
                format!("return {};\n", expr.to_string())
-            },
-            StatementType::Expression(stmt) => stmt.to_string()
+            }
         }
     }
 }
@@ -47,16 +46,6 @@ pub struct Identifier {
 impl Node for Identifier {
     fn to_string(&self) -> String {
         self.identifier.to_string()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ExpressionStatement {
-    pub expr: Expression
-}
-impl Node for ExpressionStatement {
-    fn to_string(&self) -> String {
-        self.expr.to_string()
     }
 }
 
@@ -381,13 +370,10 @@ impl<'a> Parser<'a> {
 
     fn parse_expression_statement(&mut self) -> Option<StatementType> {
         let expression = self.parse_expression(OperatorPrecedence::LOWEST)?;
-        let expression_stmt = ExpressionStatement{ 
-            expr: expression
-        };
         if self.peek_token == lexer::Token::SEMICOLON {
             self.next_token();
         }
-        Some(StatementType::Expression(expression_stmt))
+        Some(StatementType::Expression(expression))
     }
 
     fn parse_expression(&mut self, precedence: OperatorPrecedence) -> Option<Expression> {
@@ -755,8 +741,8 @@ mod tests {
         check_parse_errors(parser);
         assert_eq!(program.statements.len(), 1);
         match &program.statements[0] {
-            StatementType::Expression(stmt) => {
-                match &stmt.expr {
+            StatementType::Expression(expr) => {
+                match expr {
                     Expression::IntegerLiteral(expr) =>  assert_eq!(expr.value, 5i64),
                     _ => {
                         panic!("wrong expression type")
@@ -778,8 +764,8 @@ mod tests {
         check_parse_errors(parser);
         assert_eq!(program.statements.len(), 1);
         match &program.statements[0] {
-            StatementType::Expression(stmt) => {
-                match &stmt.expr {
+            StatementType::Expression(expr) => {
+                match expr {
                     Expression::Prefix(expr) => {
                         assert_eq!(expr.operator, "!");
                         match &*expr.right {
@@ -819,8 +805,8 @@ mod tests {
             check_parse_errors(parser);
             assert_eq!(program.statements.len(), 1);
             match &program.statements[0] {
-                StatementType::Expression(stmt) => {
-                    match &stmt.expr {
+                StatementType::Expression(expr) => {
+                    match expr {
                         Expression::Infix(expr) => {
                             assert_eq!(expr.operator, expression.2);
                             match &*expr.left {
@@ -864,8 +850,8 @@ mod tests {
             check_parse_errors(parser);
             assert_eq!(program.statements.len(), 1);
             match &program.statements[0] {
-                StatementType::Expression(stmt) => {
-                    match &stmt.expr {
+                StatementType::Expression(expr) => {
+                    match expr {
                         Expression::Infix(expr) => {
                             assert_eq!(expr.operator, expression.2);
                             match &*expr.left {
@@ -909,8 +895,8 @@ mod tests {
             check_parse_errors(parser);
             assert_eq!(program.statements.len(), 1);
             match &program.statements[0] {
-                StatementType::Expression(stmt) => {
-                    match &stmt.expr {
+                StatementType::Expression(expr) => {
+                    match expr {
                         Expression::Index(expr) => {
                             assert_eq!(expr.left.to_string(), expression.1);
                             assert_eq!(expr.index.to_string(), expression.2);                            
