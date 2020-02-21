@@ -503,9 +503,9 @@ impl Evaluator {
       ast::Expression::StringLiteral(value) => {
         ObjectType::StringObj(StringObj{ value })
       },
-      ast::Expression::ArrayLiteral(arr) => {
+      ast::Expression::ArrayLiteral(els) => {
         let mut elements = Vec::new();
-        for el in arr.elements {
+        for el in els {
           let res = self.eval_expression(el, env);
           if let ObjectType::Error(_) = res {
             return res

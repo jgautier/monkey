@@ -236,7 +236,7 @@ pub enum Expression {
     Identifier(String),
     IntegerLiteral(i64),
     StringLiteral(String),
-    ArrayLiteral(ArrayLiteral),
+    ArrayLiteral(Vec<Expression>),
     HashLiteral(HashLiteral),
     Prefix{ operator: String, right: Box<Expression>},
     Infix{ operator: String, left: Box<Expression>, right: Box<Expression>},
@@ -263,7 +263,12 @@ impl Node for Expression {
             Expression::If(if_expr) => if_expr.to_string(),
             Expression::Fn(fn_expr) => fn_expr.to_string(),
             Expression::Call(call_expr) => call_expr.to_string(),
-            Expression::ArrayLiteral(arr_expr) => arr_expr.to_string(),
+            Expression::ArrayLiteral(exprs) => {
+                let mut strs = vec!["[".to_string()];
+                strs.push(exprs.iter().map(|el| el.to_string()).collect::<Vec<String>>().join(", "));
+                strs.push("]".to_string());
+                strs.concat()
+            },
             Expression::Index(index_expr) => index_expr.to_string(),
             Expression::HashLiteral(hash) => hash.to_string()
         }
@@ -393,7 +398,7 @@ impl<'a> Parser<'a> {
             lexer::Token::LPAREN => self.parse_grouped_expression()?,
             lexer::Token::IF => self.parse_if_expression()?,
             lexer::Token::FUNCTION => self.parse_fn_expression()?,
-            lexer::Token::LBRACKET => Expression::ArrayLiteral(ArrayLiteral{elements: self.parse_expression_list(lexer::Token::RBRACKET)}),
+            lexer::Token::LBRACKET => Expression::ArrayLiteral(self.parse_expression_list(lexer::Token::RBRACKET)),
             lexer::Token::LBRACE => self.parse_hash_literal_expression()?,
             _=> return None
         };
