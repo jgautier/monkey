@@ -383,16 +383,16 @@ impl Evaluator {
           }
         }
       }
-      ast::Expression::Infix(expr) => {
-        let left = self.eval_expression(*expr.left, env);
+      ast::Expression::Infix{ operator, left, right } => {
+        let left = self.eval_expression(left.as_ref().clone(), env);
         if let ObjectType::Error(_) = left {
           return left
         }
-        let right = self.eval_expression(*expr.right, env);
+        let right = self.eval_expression(right.as_ref().clone(), env);
         if let ObjectType::Error(_) = right {
           return right
         }
-        eval_infix_expression(&expr.operator, left, right)
+        eval_infix_expression(&operator, left, right)
       },
       ast::Expression::Prefix{ operator, right} => {
         let right = self.eval_expression(right.as_ref().clone(), env);

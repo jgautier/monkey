@@ -239,7 +239,7 @@ pub enum Expression {
     ArrayLiteral(ArrayLiteral),
     HashLiteral(HashLiteral),
     Prefix{ operator: String, right: Box<Expression>},
-    Infix(Infix),
+    Infix{ operator: String, left: Box<Expression>, right: Box<Expression>},
     Boolean(Boolean),
     If(If),
     Fn(Fn),
@@ -256,7 +256,9 @@ impl Node for Expression {
             Expression::Prefix{ operator, right } => {
                 format!("({}{})", operator, right.to_string())
             },
-            Expression::Infix(inf) => inf.to_string(),
+            Expression::Infix{ operator, left, right} => {
+                format!("({} {} {})", left.to_string(), operator, right.to_string())
+            },
             Expression::Boolean(boolean) => boolean.to_string(),
             Expression::If(if_expr) => if_expr.to_string(),
             Expression::Fn(fn_expr) => fn_expr.to_string(),
@@ -599,7 +601,7 @@ impl<'a> Parser<'a> {
         self.next_token();
         match self.parse_expression(precedence) {
             Some(expr) => {
-                Some(Expression::Infix(Infix{ left: Box::new(left), operator, right: Box::new(expr) }))
+                Some(Expression::Infix{ left: Box::new(left), operator, right: Box::new(expr) })
             },
             None => None
         }
@@ -812,19 +814,19 @@ mod tests {
             match &program.statements[0] {
                 Statement::Expression(expr) => {
                     match expr {
-                        Expression::Infix(expr) => {
-                            assert_eq!(expr.operator, expression.2);
-                            match &*expr.left {
+                        Expression::Infix{ operator, left, right } => {
+                            assert_eq!(operator, expression.2);
+                            match *left.as_ref() {
                                 Expression::IntegerLiteral(i) => {
-                                    assert_eq!(*i, expression.1)
+                                    assert_eq!(i, expression.1)
                                 },
                                 _ => {
                                     panic!("wrong expression type")
                                 }   
                             }
-                            match &*expr.right {
+                            match *right.as_ref() {
                                 Expression::IntegerLiteral(i) => {
-                                    assert_eq!(*i, expression.3)
+                                    assert_eq!(i, expression.3)
                                 },
                                 _ => {
                                     panic!("wrong expression type")
@@ -857,9 +859,9 @@ mod tests {
             match &program.statements[0] {
                 Statement::Expression(expr) => {
                     match expr {
-                        Expression::Infix(expr) => {
-                            assert_eq!(expr.operator, expression.2);
-                            match &*expr.left {
+                        Expression::Infix{ operator, left, right } => {
+                            assert_eq!(operator, expression.2);
+                            match &*left.as_ref() {
                                 Expression::Boolean(i) => {
                                     assert_eq!(i.value, expression.1)
                                 },
@@ -867,7 +869,7 @@ mod tests {
                                     panic!("wrong expression type")
                                 }   
                             }
-                            match &*expr.right {
+                            match &*right.as_ref() {
                                 Expression::Boolean(i) => {
                                     assert_eq!(i.value, expression.3)
                                 },
