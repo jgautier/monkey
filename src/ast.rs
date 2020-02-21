@@ -9,7 +9,7 @@ pub trait Node {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StatementType {
-    Let(LetStatement),
+    Let{ identifier: String, value: Expression },
     Return(ReturnStatement),
     Expression(ExpressionStatement)
 }
@@ -17,7 +17,9 @@ pub enum StatementType {
 impl Node for StatementType {
     fn to_string(&self) -> String {
         match self {
-            StatementType::Let(stmt) => stmt.to_string(),
+            StatementType::Let{ identifier, value} => {
+                format!("let {} = {};\n", identifier.to_string(), value.to_string())
+            },
             StatementType::Return(stmt) => stmt.to_string(),
             StatementType::Expression(stmt) => stmt.to_string()
         }
@@ -373,9 +375,7 @@ impl<'a> Parser<'a> {
     fn parse_let_statment(&mut self) -> Option<StatementType> {
         self.next_token();
         if let lexer::Token::IDENT(_) = self.cur_token {
-            let identifier = Identifier {
-                identifier: self.cur_token.clone().to_string()
-            };
+            let identifier = self.cur_token.clone().to_string();
             
             if !self.expect_peek(lexer::Token::ASSIGN) {
                 return None;
@@ -387,10 +387,7 @@ impl<'a> Parser<'a> {
                 self.next_token();
             }
 
-            Some(StatementType::Let(LetStatement {
-                name: identifier,
-                value: Box::new(value)
-            }))
+            Some(StatementType::Let{ identifier, value })
         } else {
             None
         }
@@ -683,12 +680,12 @@ mod tests {
             println!("Parse Error: {}", msg);
         }
     }
-    fn test_let_statement(statement: &StatementType, name: &str, value: i64) {
+    fn test_let_statement(statement: &StatementType, name: &str, val: i64) {
         match statement {
-            StatementType::Let(stmt) => {
-                assert_eq!(stmt.name.to_string(), name);
-                if let Expression::IntegerLiteral(expr) = &*stmt.value {
-                    assert_eq!(expr.value, value);
+            StatementType::Let{ identifier, value } => {
+                assert_eq!(identifier, name);
+                if let Expression::IntegerLiteral(expr) = value {
+                    assert_eq!(expr.value, val);
                 }
             },
             _ => {
@@ -749,14 +746,7 @@ mod tests {
     fn to_string() {
         Program {
             statements: vec![
-                StatementType::Let(LetStatement {
-                    name: Identifier {
-                        identifier: "myVar".to_string()
-                    },
-                    value: Box::new(Expression::IntegerLiteral(IntegerLiteral {
-                        value: 5
-                    }))
-                })
+                StatementType::Let{ identifier: "myVar".to_string(), value: Expression::IntegerLiteral(IntegerLiteral { value: 5 })}
             ]
         };
     }

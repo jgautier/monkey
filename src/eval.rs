@@ -576,9 +576,9 @@ impl Evaluator {
         }
         ObjectType::Return(Box::new(ret))
       },
-      ast::StatementType::Let(stmt) => {
-        let ret = self.eval_expression(*stmt.value, env);
-        env.borrow_mut().set(stmt.name.to_string(), &ret);
+      ast::StatementType::Let{ identifier, value} => {
+        let ret = self.eval_expression(value, env);
+        env.borrow_mut().set(identifier, &ret);
         ObjectType::Null(Null {})
       }
     }
