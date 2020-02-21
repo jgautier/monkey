@@ -1,13 +1,13 @@
 use std::fmt;
-#[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
-pub enum TokenType {
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+pub enum Token<'a> {
     ILLEGAL,
     EOF,
 
     // Identifiers + literals
-    IDENT,
-    INT,
-    STRING,
+    IDENT(&'a str),
+    INT(&'a str),
+    STRING(&'a str),
 
     // Operators
     ASSIGN,
@@ -42,95 +42,103 @@ pub enum TokenType {
     RETURN
 }
 
-impl fmt::Display for TokenType {
+impl<'a> fmt::Display for Token<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        let string = match self {
+            Token::ASSIGN => "=",
+            Token::PLUS => "+",
+            Token::MINUS => "-",
+            Token::BANG => "!",
+            Token::ASTERISK => "*",
+            Token::SLASH => "/",
+            Token::LT => "<",
+            Token::GT => ">",
+            Token::COMMA => ",",
+            Token::SEMICOLON => ";",
+            Token::LPAREN => "(",
+            Token::RPAREN => ")",
+            Token::LBRACE => "{",
+            Token::RBRACE => "}",
+            Token::LBRACKET => "[",
+            Token::RBRACKET => "]",
+            Token::COLON => ":",
+            Token::LET => "let",
+            Token::FUNCTION => "fn",
+            Token::TRUE => "true",
+            Token::FALSE => "false",
+            Token::IF => "if",
+            Token::ELSE => "else",
+            Token::RETURN => "return",
+            Token::EQ => "==",
+            Token::NEQ => "!=",
+            Token::IDENT(id) => id,
+            Token::STRING(string) => string,
+            Token::INT(i) => i,
+            Token::EOF => "",
+            Token::ILLEGAL => "ILLEGAL"
+        };
+        write!(f, "{}", string)
     }
 }
-#[derive(Clone, Eq, PartialEq, Debug, Hash)]
-pub struct Token {
-    pub token_type: TokenType,
-    pub literal: String
-}
 
-impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TokenType: {}, literal: {}", self.token_type, self.literal)
-    }
-}
-
-impl Token {
+impl<'a> Token<'a> {
     pub fn from_chr(chr: &str) -> Option<Self> {
-        let t = match chr {
-            //"IDENT" => TokenType::IDENT,
-            //"INT" => TokenType::INT,
-            "=" => TokenType::ASSIGN,
-            "+" => TokenType::PLUS,
-            "-" => TokenType::MINUS,
-            "!" => TokenType::BANG,
-            "*" => TokenType::ASTERISK,
-            "/" => TokenType::SLASH,
-            "<" => TokenType::LT,
-            ">" => TokenType::GT,
-            "," => TokenType::COMMA,
-            ";" => TokenType::SEMICOLON,
-            "(" => TokenType::LPAREN,
-            ")" => TokenType::RPAREN,
-            "{" => TokenType::LBRACE,
-            "}" => TokenType::RBRACE,
-            "[" => TokenType::LBRACKET,
-            "]" => TokenType::RBRACKET,
-            ":" => TokenType::COLON,
+        Some(match chr {
+            "=" => Token::ASSIGN,
+            "+" => Token::PLUS,
+            "-" => Token::MINUS,
+            "!" => Token::BANG,
+            "*" => Token::ASTERISK,
+            "/" => Token::SLASH,
+            "<" => Token::LT,
+            ">" => Token::GT,
+            "," => Token::COMMA,
+            ";" => Token::SEMICOLON,
+            "(" => Token::LPAREN,
+            ")" => Token::RPAREN,
+            "{" => Token::LBRACE,
+            "}" => Token::RBRACE,
+            "[" => Token::LBRACKET,
+            "]" => Token::RBRACKET,
+            ":" => Token::COLON,
             _ => {
                 return None
             }
-        };
-        Some(Self {
-            token_type: t,
-            literal: chr.to_string()
         })
     }
     pub fn from_two_chars(chars: &str) -> Option<Self> {
-        let t = match chars {
-            "==" => TokenType::EQ,
-            "!=" => TokenType::NEQ,
+        Some(match chars {
+            "==" => Token::EQ,
+            "!=" => Token::NEQ,
             _ => {
                 return None
             }
-        };
-        Some(Self {
-            token_type: t,
-            literal: chars.to_string()
         })
     }
-    pub fn from_identifier(string: &str) -> Option<Self> {
-        let t = match string {
-            "let" => TokenType::LET,
-            "fn" => TokenType::FUNCTION,
-            "true" => TokenType::TRUE,
-            "false" => TokenType::FALSE,
-            "if" => TokenType::IF,
-            "else" => TokenType::ELSE,
-            "return" => TokenType::RETURN,
-            _ => TokenType::IDENT
-        };
-        Some(Self {
-            token_type: t,
-            literal: string.to_string()
-        })
+    pub fn from_identifier(string: &'a str) -> Self {
+        match string {
+            "let" => Token::LET,
+            "fn" => Token::FUNCTION,
+            "true" => Token::TRUE,
+            "false" => Token::FALSE,
+            "if" => Token::IF,
+            "else" => Token::ELSE,
+            "return" => Token::RETURN,
+            _ => Token::IDENT(string)
+        }
     }
 }
 
-pub struct Lexer {
+pub struct Lexer<'a> {
     cur_index: usize,
-    input: String
+    input: &'a str
 }
 
-impl Lexer {
-    pub fn new(input: &str) -> Self {
+impl<'a> Lexer<'a> {
+    pub fn new(input: &'a str) -> Self {
         Self {
             cur_index: 0,
-            input: input.to_string()
+            input
         }
     }
 
@@ -146,7 +154,7 @@ impl Lexer {
         }
     }
 
-    pub fn find_two_char_token(&mut self) -> Option<Token> {
+    pub fn find_two_char_token(&mut self) -> Option<Token<'a>> {
         if self.cur_index + 2 < self.input.len() {
             let chars = &self.input[self.cur_index..self.cur_index + 2];
             let token = Token::from_two_chars(chars)?;
@@ -157,7 +165,7 @@ impl Lexer {
         }
     }
 
-    pub fn find_one_char_token(&mut self) -> Option<Token> {
+    pub fn find_one_char_token(&mut self) -> Option<Token<'a>> {
         let chr = &self.input[self.cur_index..=self.cur_index];
         let token = Token::from_chr(chr)?;
         self.cur_index += 1;
@@ -168,65 +176,56 @@ impl Lexer {
         self.cur_index > self.input.len()
     }
 
-    pub fn find_eof(&mut self) -> Option<Token> {
+    pub fn find_eof(&mut self) -> Option<Token<'a>> {
         if self.cur_index == self.input.len() {
             self.cur_index += 1;
-            Some(Token {
-                token_type: TokenType::EOF,
-                literal: "EOF".to_string()
-            })
+            Some(Token::EOF)
         } else {
             None
         }
     }
 
-    pub fn find_identifier(&mut self) -> Option<Token> {
+    pub fn find_identifier(&mut self) -> Option<Token<'a>> {
         let chr = self.get_curr_char()?;
         if chr.is_alphabetic() || chr == '_' {
             let i = self.input[self.cur_index..].find(|c: char| !c.is_alphanumeric()).unwrap_or_else(|| self.input.len() - self.cur_index);
             let token = Token::from_identifier(&self.input[self.cur_index..self.cur_index + i]);
             self.cur_index += i;
-            token
+            Some(token)
         } else {
             None
         }
     }
 
-    pub fn find_numeric_literal(&mut self) -> Option<Token> {
+    pub fn find_numeric_literal(&mut self) -> Option<Token<'a>> {
         let chr = self.get_curr_char()?;
         if chr.is_numeric() {
             let i = self.input[self.cur_index..].find(|c: char| !c.is_numeric()).unwrap_or_else(|| self.input.len() - self.cur_index);
-            let token = Some(Token {
-                token_type: TokenType::INT,
-                literal: self.input[self.cur_index..self.cur_index + i].to_string()
-            });
+            let value = &self.input[self.cur_index..self.cur_index + i];
             self.cur_index += i;
-            token
+            Some(Token::INT(value))
         } else {
             None
         }
     }
 
-    pub fn find_string_literal(&mut self) -> Option<Token> {
+    pub fn find_string_literal(&mut self) -> Option<Token<'a>> {
         let chr = self.get_curr_char()?;
         if chr == '"' {
             let i = self.input[self.cur_index +  1..].find(|c: char| c == '"').unwrap_or_else(|| self.input.len() - self.cur_index);
-            let token = Some(Token {
-                token_type: TokenType::STRING,
-                literal: self.input[self.cur_index + 1..=self.cur_index + i].to_string()
-            });
-            self.cur_index += i + 2;
-            token
+            let string = &self.input[self.cur_index + 1..=self.cur_index + i];
+            self.cur_index += i + 2;            
+            Some(Token::STRING(string))
         } else {
             None
         }
     }
 }
 
-impl Iterator for Lexer {
-    type Item = Token;
+impl<'a> Iterator for Lexer<'a> {
+    type Item = Token<'a>;
     
-    fn next(&mut self) -> Option<Token> {
+    fn next(&mut self) -> Option<Token<'a>> {
         if self.check_done() {
             return None
         }
@@ -238,7 +237,7 @@ impl Iterator for Lexer {
             .or_else(|| self.find_identifier())
             .or_else(|| self.find_numeric_literal())
             .or_else(|| self.find_string_literal())
-            .or_else(|| Some(Token { token_type: TokenType::ILLEGAL, literal: "".to_string() }))
+            .or_else(|| Some(Token::ILLEGAL))
     }
 }
 
@@ -274,153 +273,127 @@ mod tests {
             {\"foo\": \"bar\"};
         ";
         let mut lexer = Lexer::new(&INPUT);
-        assert_eq!(TokenType::LET, lexer.next().unwrap().token_type);
+        assert_eq!(Token::LET, lexer.next().unwrap());
         let five_identifier = lexer.next().unwrap();
-        assert_eq!(TokenType::IDENT, five_identifier.token_type);
-        assert_eq!("five", five_identifier.literal);
-        assert_eq!(TokenType::ASSIGN, lexer.next().unwrap().token_type);
+        assert_eq!(Token::IDENT("five"), five_identifier);
+        assert_eq!(Token::ASSIGN, lexer.next().unwrap());
         let five_number = lexer.next().unwrap();
-        assert_eq!(TokenType::INT, five_number.token_type);
-        assert_eq!("5", five_number.literal);
-        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::LET, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::IDENT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::ASSIGN, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::INT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
+        assert_eq!(Token::INT("5"), five_number);
+        assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
+        assert_eq!(Token::LET, lexer.next().unwrap());
+        assert_eq!(Token::IDENT("ten"), lexer.next().unwrap());
+        assert_eq!(Token::ASSIGN, lexer.next().unwrap());
+        assert_eq!(Token::INT("10"), lexer.next().unwrap());
+        assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
 
-        assert_eq!(TokenType::LET, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::IDENT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::ASSIGN, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::FUNCTION, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::LPAREN, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::IDENT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::COMMA, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::IDENT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::RPAREN, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::LBRACE, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::IDENT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::PLUS, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::IDENT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::RBRACE, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
+        assert_eq!(Token::LET, lexer.next().unwrap());
+        assert_eq!(Token::IDENT("add"), lexer.next().unwrap());
+        assert_eq!(Token::ASSIGN, lexer.next().unwrap());
+        assert_eq!(Token::FUNCTION, lexer.next().unwrap());
+        assert_eq!(Token::LPAREN, lexer.next().unwrap());
+        assert_eq!(Token::IDENT("x"), lexer.next().unwrap());
+        assert_eq!(Token::COMMA, lexer.next().unwrap());
+        assert_eq!(Token::IDENT("y"), lexer.next().unwrap());
+        assert_eq!(Token::RPAREN, lexer.next().unwrap());
+        assert_eq!(Token::LBRACE, lexer.next().unwrap());
+        assert_eq!(Token::IDENT("x"), lexer.next().unwrap());
+        assert_eq!(Token::PLUS, lexer.next().unwrap());
+        assert_eq!(Token::IDENT("y"), lexer.next().unwrap());
+        assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
+        assert_eq!(Token::RBRACE, lexer.next().unwrap());
+        assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
 
-        assert_eq!(TokenType::LET, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::IDENT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::ASSIGN, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::IDENT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::LPAREN, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::IDENT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::COMMA, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::IDENT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::RPAREN, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
+        assert_eq!(Token::LET, lexer.next().unwrap());
+        assert_eq!(Token::IDENT("result"), lexer.next().unwrap());
+        assert_eq!(Token::ASSIGN, lexer.next().unwrap());
+        assert_eq!(Token::IDENT("add"), lexer.next().unwrap());
+        assert_eq!(Token::LPAREN, lexer.next().unwrap());
+        assert_eq!(Token::IDENT("five"), lexer.next().unwrap());
+        assert_eq!(Token::COMMA, lexer.next().unwrap());
+        assert_eq!(Token::IDENT("ten"), lexer.next().unwrap());
+        assert_eq!(Token::RPAREN, lexer.next().unwrap());
+        assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
 
-        assert_eq!(TokenType::BANG, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::MINUS, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::SLASH, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::ASTERISK, lexer.next().unwrap().token_type);
-        let five_number = lexer.next().unwrap();
-        assert_eq!(TokenType::INT, five_number.token_type);
-        assert_eq!("5", five_number.literal);
-        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
-        let five_number = lexer.next().unwrap();
-        assert_eq!(TokenType::INT, five_number.token_type);
-        assert_eq!("5", five_number.literal);
-        assert_eq!(TokenType::LT, lexer.next().unwrap().token_type);
-        let ten_number = lexer.next().unwrap();
-        assert_eq!(TokenType::INT, five_number.token_type);
-        assert_eq!("10", ten_number.literal);
-        assert_eq!(TokenType::GT, lexer.next().unwrap().token_type);
-        let five_number = lexer.next().unwrap();
-        assert_eq!(TokenType::INT, five_number.token_type);
-        assert_eq!("5", five_number.literal);
-        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
+        assert_eq!(Token::BANG, lexer.next().unwrap());
+        assert_eq!(Token::MINUS, lexer.next().unwrap());
+        assert_eq!(Token::SLASH, lexer.next().unwrap());
+        assert_eq!(Token::ASTERISK, lexer.next().unwrap());
+        assert_eq!(Token::INT("5"), lexer.next().unwrap());
+        assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
+        assert_eq!(Token::INT("5"), lexer.next().unwrap());
+        assert_eq!(Token::LT, lexer.next().unwrap());
+        assert_eq!(Token::INT("10"),  lexer.next().unwrap());
+        assert_eq!(Token::GT, lexer.next().unwrap());
+        assert_eq!(Token::INT("5"),  lexer.next().unwrap());
+        assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
 
-        assert_eq!(TokenType::IF, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::LPAREN, lexer.next().unwrap().token_type);
-         let five_number = lexer.next().unwrap();
-        assert_eq!(TokenType::INT, five_number.token_type);
-        assert_eq!("5", five_number.literal);
-        assert_eq!(TokenType::LT, lexer.next().unwrap().token_type);
-        let ten_number = lexer.next().unwrap();
-        assert_eq!(TokenType::INT, five_number.token_type);
-        assert_eq!("10", ten_number.literal);
-        assert_eq!(TokenType::RPAREN, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::LBRACE, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::RETURN, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::TRUE, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::RBRACE, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::ELSE, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::LBRACE, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::RETURN, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::FALSE, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::RBRACE, lexer.next().unwrap().token_type);
+        assert_eq!(Token::IF, lexer.next().unwrap());
+        assert_eq!(Token::LPAREN, lexer.next().unwrap());
+        assert_eq!(Token::INT("5"),  lexer.next().unwrap());
+        assert_eq!(Token::LT, lexer.next().unwrap());
+        assert_eq!(Token::INT("10"),  lexer.next().unwrap());
+        assert_eq!(Token::RPAREN, lexer.next().unwrap());
+        assert_eq!(Token::LBRACE, lexer.next().unwrap());
+        assert_eq!(Token::RETURN, lexer.next().unwrap());
+        assert_eq!(Token::TRUE, lexer.next().unwrap());
+        assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
+        assert_eq!(Token::RBRACE, lexer.next().unwrap());
+        assert_eq!(Token::ELSE, lexer.next().unwrap());
+        assert_eq!(Token::LBRACE, lexer.next().unwrap());
+        assert_eq!(Token::RETURN, lexer.next().unwrap());
+        assert_eq!(Token::FALSE, lexer.next().unwrap());
+        assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
+        assert_eq!(Token::RBRACE, lexer.next().unwrap());
 
-        let ten_number = lexer.next().unwrap();
-        assert_eq!(TokenType::INT, ten_number.token_type);
-        assert_eq!("10", ten_number.literal);
-        assert_eq!(TokenType::EQ, lexer.next().unwrap().token_type);
-        let ten_number = lexer.next().unwrap();
-        assert_eq!(TokenType::INT, ten_number.token_type);
-        assert_eq!("10", ten_number.literal);
-        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
+        assert_eq!(Token::INT("10"),  lexer.next().unwrap());
+        assert_eq!(Token::EQ, lexer.next().unwrap());
+        assert_eq!(Token::INT("10"),  lexer.next().unwrap());
+        assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
 
-        let ten_number = lexer.next().unwrap();
-        assert_eq!(TokenType::INT, ten_number.token_type);
-        assert_eq!("10", ten_number.literal);
-        assert_eq!(TokenType::NEQ, lexer.next().unwrap().token_type);
-        let nine_number = lexer.next().unwrap();
-        assert_eq!(TokenType::INT, nine_number.token_type);
-        assert_eq!("9", nine_number.literal);
-        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
-        let foobar = lexer.next().unwrap();
-        assert_eq!(TokenType::STRING, foobar.token_type);
-        assert_eq!("foobar", foobar.literal);
-        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
-        let foo_bar = lexer.next().unwrap();
-        assert_eq!(TokenType::STRING, foo_bar.token_type);
-        assert_eq!("foo bar", foo_bar.literal);
-        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::LBRACKET, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::INT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::COMMA, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::INT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::RBRACKET, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
+        assert_eq!(Token::INT("10"),  lexer.next().unwrap());
+        assert_eq!(Token::NEQ, lexer.next().unwrap());
+        assert_eq!(Token::INT("9"),  lexer.next().unwrap());
+        assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
+        assert_eq!(Token::STRING("foobar"), lexer.next().unwrap());
+        assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
+        assert_eq!(Token::STRING("foo bar"), lexer.next().unwrap());
+        assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
+        assert_eq!(Token::LBRACKET, lexer.next().unwrap());
+        assert_eq!(Token::INT("1"), lexer.next().unwrap());
+        assert_eq!(Token::COMMA, lexer.next().unwrap());
+        assert_eq!(Token::INT("2"), lexer.next().unwrap());
+        assert_eq!(Token::RBRACKET, lexer.next().unwrap());
+        assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
         
-        assert_eq!(TokenType::LBRACKET, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::INT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::COMMA, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::INT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::RBRACKET, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::LBRACKET, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::INT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::RBRACKET, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
+        assert_eq!(Token::LBRACKET, lexer.next().unwrap());
+        assert_eq!(Token::INT("1"), lexer.next().unwrap());
+        assert_eq!(Token::COMMA, lexer.next().unwrap());
+        assert_eq!(Token::INT("2"), lexer.next().unwrap());
+        assert_eq!(Token::RBRACKET, lexer.next().unwrap());
+        assert_eq!(Token::LBRACKET, lexer.next().unwrap());
+        assert_eq!(Token::INT("0"), lexer.next().unwrap());
+        assert_eq!(Token::RBRACKET, lexer.next().unwrap());
+        assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
 
-        assert_eq!(TokenType::LBRACE, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::STRING, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::COLON, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::STRING, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::RBRACE, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::SEMICOLON, lexer.next().unwrap().token_type);
+        assert_eq!(Token::LBRACE, lexer.next().unwrap());
+        assert_eq!(Token::STRING("foo"), lexer.next().unwrap());
+        assert_eq!(Token::COLON, lexer.next().unwrap());
+        assert_eq!(Token::STRING("bar"), lexer.next().unwrap());
+        assert_eq!(Token::RBRACE, lexer.next().unwrap());
+        assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
 
-        assert_eq!(TokenType::EOF, lexer.next().unwrap().token_type);
+        assert_eq!(Token::EOF, lexer.next().unwrap());
         assert_eq!(None, lexer.next());
     }
     #[test]
     fn test_expression() {
         let string = "-a * b";
         let mut lexer = Lexer::new(&string);
-        assert_eq!(TokenType::MINUS, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::IDENT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::ASTERISK, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::IDENT, lexer.next().unwrap().token_type);
-        assert_eq!(TokenType::EOF, lexer.next().unwrap().token_type);
+        assert_eq!(Token::MINUS, lexer.next().unwrap());
+        assert_eq!(Token::IDENT("a"), lexer.next().unwrap());
+        assert_eq!(Token::ASTERISK, lexer.next().unwrap());
+        assert_eq!(Token::IDENT("b"), lexer.next().unwrap());
+        assert_eq!(Token::EOF, lexer.next().unwrap());
         assert_eq!(None, lexer.next())
     }
 }

@@ -115,7 +115,7 @@ impl Object for ObjectType {
         string.value.to_string()
       }
       ObjectType::Function(func) => {
-        let params = func.params.clone().into_iter().map(|p| p.token.to_string()).collect::<Vec<String>>().join(",");
+        let params = func.params.clone().into_iter().map(|p| p.identifier).collect::<Vec<String>>().join(",");
         let strings = vec![
           format!("fn({}) {{", params),
           func.body.to_string(),
