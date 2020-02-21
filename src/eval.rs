@@ -328,12 +328,12 @@ impl Evaluator {
   }
   fn eval_expression(&self, expr: ast::Expression, env: &Rc<RefCell<Environment>>) -> ObjectType {
     match expr {
-      ast::Expression::Index(expr) => {
-        let left = self.eval_expression(*expr.left, env);
+      ast::Expression::Index{ left, index } => {
+        let left = self.eval_expression(left.as_ref().clone(), env);
         if let ObjectType::Error(_) = left {
           return left
         }
-        let index = self.eval_expression(*expr.index, env);
+        let index = self.eval_expression(index.as_ref().clone(), env);
         if let ObjectType::Error(_) = index {
           return index
         }
@@ -456,24 +456,24 @@ impl Evaluator {
           }
         }
       },
-      ast::Expression::Call(call) => {
-        let res = self.eval_expression(*call.function, env);
+      ast::Expression::Call{ function, args } => {
+        let res = self.eval_expression(function.as_ref().clone(), env);
         match res {
           ObjectType::Error(_) => {
             res
           },
           ObjectType::Function(func) => {
-            let mut args = Vec::new();
-            for arg in call.args {
+            let mut call_args = Vec::new();
+            for arg in args {
               let res = self.eval_expression(arg, env);
               if let ObjectType::Error(_) = res {
                 return res
               }
-              args.push(res);
+              call_args.push(res);
             }
             let mut func_env = Environment::new(Some(Rc::clone(&func.env)));
             for (idx, param) in func.params.iter().enumerate() {
-              func_env.set(param.to_string(), &args[idx]);
+              func_env.set(param.to_string(), &call_args[idx]);
             }
             let func_res = self.eval_block_statements(func.body.statements, &Rc::new(RefCell::new(func_env)));
             if let ObjectType::Return(val) = func_res {
@@ -482,15 +482,15 @@ impl Evaluator {
             func_res
           },
           ObjectType::BuiltIn(built_in) => {
-            let mut args = Vec::new();
-            for arg in call.args {
+            let mut call_args = Vec::new();
+            for arg in args {
               let res = self.eval_expression(arg, env);
               if let ObjectType::Error(_) = res {
                 return res
               }
-              args.push(res);
+              call_args.push(res);
             }
-            (built_in.function)(args)
+            (built_in.function)(call_args)
           },
           _ => {
             ObjectType::Error("Not a Function".to_string())

@@ -238,13 +238,13 @@ pub enum Expression {
     StringLiteral(String),
     ArrayLiteral(Vec<Expression>),
     HashLiteral(HashLiteral),
+    Boolean(bool),
     Prefix{ operator: String, right: Box<Expression> },
     Infix{ operator: String, left: Box<Expression>, right: Box<Expression> },
-    Boolean(bool),
     If{ condition: Box<Expression>, consequence: BlockStatement, alternative: Option<BlockStatement> },
     Fn{ params: Vec<String>, body: BlockStatement },
-    Call(Call),
-    Index(Index)
+    Call{ function: Box<Expression>, args: Vec<Expression> },
+    Index{ left: Box<Expression>, index: Box<Expression> }
 }
 
 impl Node for Expression {
@@ -280,14 +280,27 @@ impl Node for Expression {
                 strs.push(body.to_string());
                 strs.concat()
             },
-            Expression::Call(call_expr) => call_expr.to_string(),
+            Expression::Call{ function, args } => {
+                let mut strs = vec![function.to_string()];
+                strs.push("(".to_string());
+                strs.push(args.iter().map(|arg| arg.to_string()).collect::<Vec<String>>().join(", "));
+                strs.push((")").to_string());
+                strs.concat()
+            },
             Expression::ArrayLiteral(exprs) => {
                 let mut strs = vec!["[".to_string()];
                 strs.push(exprs.iter().map(|el| el.to_string()).collect::<Vec<String>>().join(", "));
                 strs.push("]".to_string());
                 strs.concat()
             },
-            Expression::Index(index_expr) => index_expr.to_string(),
+            Expression::Index{ left, index } => {
+                let mut strs = vec!["(".to_string()];
+                strs.push(left.to_string());
+                strs.push("[".to_string());
+                strs.push(index.to_string());
+                strs.push("])".to_string());
+                strs.concat()
+            },
             Expression::HashLiteral(hash) => hash.to_string()
         }
     }
@@ -601,7 +614,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_call_expression(&mut self, function: Expression) -> Option<Expression> {
-        Some(Expression::Call(Call { function: Box::new(function), args: self.parse_expression_list(lexer::Token::RPAREN) }))
+        Some(Expression::Call { function: Box::new(function), args: self.parse_expression_list(lexer::Token::RPAREN) })
     }
 
     fn parse_infix_expression(&mut self, left: Expression) -> Option<Expression> {
@@ -610,7 +623,7 @@ impl<'a> Parser<'a> {
         }
         if self.cur_token == lexer::Token::LBRACKET {
             self.next_token();
-            let index_expr = Some(Expression::Index(Index{ left: Box::new(left), index: Box::new(self.parse_expression(OperatorPrecedence::LOWEST)?)}));
+            let index_expr = Some(Expression::Index{ left: Box::new(left), index: Box::new(self.parse_expression(OperatorPrecedence::LOWEST)?)});
             self.next_token();
             if self.cur_token != lexer::Token::RBRACKET {
                 return None;
@@ -927,9 +940,9 @@ mod tests {
             match &program.statements[0] {
                 Statement::Expression(expr) => {
                     match expr {
-                        Expression::Index(expr) => {
-                            assert_eq!(expr.left.to_string(), expression.1);
-                            assert_eq!(expr.index.to_string(), expression.2);                            
+                        Expression::Index{ left, index } => {
+                            assert_eq!(left.to_string(), expression.1);
+                            assert_eq!(index.to_string(), expression.2);                            
                         }
                         _ => {
                             panic!("wrong expression type")
