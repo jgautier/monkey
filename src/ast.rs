@@ -234,8 +234,8 @@ impl Node for Index {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Expression {
     Identifier(String),
-    IntegerLiteral(IntegerLiteral),
-    StringLiteral(StringLiteral),
+    IntegerLiteral(i64),
+    StringLiteral(String),
     ArrayLiteral(ArrayLiteral),
     HashLiteral(HashLiteral),
     Prefix(Prefix),
@@ -252,7 +252,7 @@ impl Node for Expression {
         match self {
             Expression::Identifier(id) => id.to_string(),
             Expression::IntegerLiteral(int) => int.to_string(),
-            Expression::StringLiteral(string) => string.to_string(),
+            Expression::StringLiteral(string) => format!("\"{}\"", string.to_string()),
             Expression::Prefix(pre) => pre.to_string(),
             Expression::Infix(inf) => inf.to_string(),
             Expression::Boolean(boolean) => boolean.to_string(),
@@ -503,7 +503,7 @@ impl<'a> Parser<'a> {
     fn parse_integer_literal_expression(&mut self) -> Option<Expression> {
         if let lexer::Token::INT(value) = self.cur_token {
             if let Ok(value) = value.parse() {
-                Some(Expression::IntegerLiteral(IntegerLiteral{ value }))
+                Some(Expression::IntegerLiteral(value))
             } else {
                 None
             }
@@ -514,7 +514,7 @@ impl<'a> Parser<'a> {
 
     fn parse_string_literal_expression(&mut self) -> Expression {
         let literal = self.cur_token.clone().to_string();
-        Expression::StringLiteral(StringLiteral{ value: literal })
+        Expression::StringLiteral(literal)
     }
 
     fn parse_prefix_expression(&mut self) -> Option<Expression> {
@@ -650,8 +650,8 @@ mod tests {
         match statement {
             Statement::Let{ identifier, value } => {
                 assert_eq!(identifier, name);
-                if let Expression::IntegerLiteral(expr) = value {
-                    assert_eq!(expr.value, val);
+                if let Expression::IntegerLiteral(i) = value {
+                    assert_eq!(*i, val);
                 }
             },
             _ => {
@@ -663,8 +663,8 @@ mod tests {
     fn test_return_statement(statement: &Statement, value: i64) {
         match statement {
             Statement::Return(val) => {
-                if let Expression::IntegerLiteral(expr) = val {
-                    assert_eq!(expr.value, value);
+                if let Expression::IntegerLiteral(i) = val {
+                    assert_eq!(*i, value);
                 }
             },
             _ => {
@@ -712,7 +712,7 @@ mod tests {
     fn to_string() {
         Program {
             statements: vec![
-                Statement::Let{ identifier: "myVar".to_string(), value: Expression::IntegerLiteral(IntegerLiteral { value: 5 })}
+                Statement::Let{ identifier: "myVar".to_string(), value: Expression::IntegerLiteral(5)}
             ]
         };
     }
@@ -746,7 +746,7 @@ mod tests {
         match &program.statements[0] {
             Statement::Expression(expr) => {
                 match expr {
-                    Expression::IntegerLiteral(expr) =>  assert_eq!(expr.value, 5i64),
+                    Expression::IntegerLiteral(i) =>  assert_eq!(*i, 5i64),
                     _ => {
                         panic!("wrong expression type")
                     }
@@ -773,7 +773,7 @@ mod tests {
                         assert_eq!(expr.operator, "!");
                         match &*expr.right {
                             Expression::IntegerLiteral(i) => {
-                                assert_eq!(i.value, 5)
+                                assert_eq!(*i, 5)
                             },
                             _ => {
                                 panic!("wrong expression type")
@@ -814,7 +814,7 @@ mod tests {
                             assert_eq!(expr.operator, expression.2);
                             match &*expr.left {
                                 Expression::IntegerLiteral(i) => {
-                                    assert_eq!(i.value, expression.1)
+                                    assert_eq!(*i, expression.1)
                                 },
                                 _ => {
                                     panic!("wrong expression type")
@@ -822,7 +822,7 @@ mod tests {
                             }
                             match &*expr.right {
                                 Expression::IntegerLiteral(i) => {
-                                    assert_eq!(i.value, expression.3)
+                                    assert_eq!(*i, expression.3)
                                 },
                                 _ => {
                                     panic!("wrong expression type")

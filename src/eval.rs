@@ -402,7 +402,7 @@ impl Evaluator {
         eval_prefix_expression(&expr.operator, right)
       },
       ast::Expression::IntegerLiteral(int) => {
-        ObjectType::Integer(Integer { value: int.value })
+        ObjectType::Integer(Integer { value: int })
       },
       ast::Expression::Boolean(boolean) => {
         ObjectType::Boolean(Boolean { value: boolean.value })
@@ -500,8 +500,8 @@ impl Evaluator {
       ast::Expression::Fn(fn_expr) => {
         ObjectType::Function(Function { params: fn_expr.params, body: *fn_expr.body, env: Rc::clone(env) })
       },
-      ast::Expression::StringLiteral(string) => {
-        ObjectType::StringObj(StringObj{ value: string.value })
+      ast::Expression::StringLiteral(value) => {
+        ObjectType::StringObj(StringObj{ value })
       },
       ast::Expression::ArrayLiteral(arr) => {
         let mut elements = Vec::new();
