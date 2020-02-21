@@ -240,7 +240,7 @@ pub enum Expression {
     HashLiteral(HashLiteral),
     Prefix{ operator: String, right: Box<Expression>},
     Infix{ operator: String, left: Box<Expression>, right: Box<Expression>},
-    Boolean(Boolean),
+    Boolean(bool),
     If(If),
     Fn(Fn),
     Call(Call),
@@ -497,7 +497,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_boolean_expression(&mut self) -> Expression {
-        Expression::Boolean(Boolean{ value: self.cur_token == lexer::Token::TRUE})
+        Expression::Boolean(self.cur_token == lexer::Token::TRUE)
     }
 
     fn parse_identifier_expression(&mut self) -> Expression {
@@ -863,7 +863,7 @@ mod tests {
                             assert_eq!(operator, expression.2);
                             match &*left.as_ref() {
                                 Expression::Boolean(i) => {
-                                    assert_eq!(i.value, expression.1)
+                                    assert_eq!(*i, expression.1)
                                 },
                                 _ => {
                                     panic!("wrong expression type")
@@ -871,7 +871,7 @@ mod tests {
                             }
                             match &*right.as_ref() {
                                 Expression::Boolean(i) => {
-                                    assert_eq!(i.value, expression.3)
+                                    assert_eq!(*i, expression.3)
                                 },
                                 _ => {
                                     panic!("wrong expression type")

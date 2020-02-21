@@ -404,8 +404,8 @@ impl Evaluator {
       ast::Expression::IntegerLiteral(int) => {
         ObjectType::Integer(Integer { value: int })
       },
-      ast::Expression::Boolean(boolean) => {
-        ObjectType::Boolean(Boolean { value: boolean.value })
+      ast::Expression::Boolean(value) => {
+        ObjectType::Boolean(Boolean { value })
       },
       ast::Expression::If(i) => {
         self.eval_if_expression(i, env)
