@@ -242,7 +242,7 @@ pub enum Expression {
     Infix{ operator: String, left: Box<Expression>, right: Box<Expression> },
     Boolean(bool),
     If{ condition: Box<Expression>, consequence: BlockStatement, alternative: Option<BlockStatement> },
-    Fn(Fn),
+    Fn{ params: Vec<String>, body: BlockStatement },
     Call(Call),
     Index(Index)
 }
@@ -273,7 +273,13 @@ impl Node for Expression {
                 strs.push(";".to_string());
                 strs.concat()
             },
-            Expression::Fn(fn_expr) => fn_expr.to_string(),
+            Expression::Fn{ params, body } => {
+                let mut strs = vec!["fn(".to_string()];
+                strs.push(params.iter().map(|param| param.to_string()).collect::<Vec<String>>().join(", "));
+                strs.push((") ").to_string());
+                strs.push(body.to_string());
+                strs.concat()
+            },
             Expression::Call(call_expr) => call_expr.to_string(),
             Expression::ArrayLiteral(exprs) => {
                 let mut strs = vec!["[".to_string()];
@@ -428,7 +434,7 @@ impl<'a> Parser<'a> {
         self.infix_operators.contains(&self.peek_token)
     }
 
-    fn parse_fn_parameters(&mut self) -> Vec<Identifier> {
+    fn parse_fn_parameters(&mut self) -> Vec<String> {
         let mut identifiers = Vec::new();
         if self.peek_token == lexer::Token::RPAREN {
             self.next_token();
@@ -437,12 +443,12 @@ impl<'a> Parser<'a> {
 
         self.next_token();
 
-        identifiers.push(Identifier{ identifier: self.cur_token.clone().to_string() });
+        identifiers.push(self.cur_token.clone().to_string());
 
         while self.peek_token == lexer::Token::COMMA {
             self.next_token();
             self.next_token();
-            identifiers.push(Identifier{ identifier: self.cur_token.clone().to_string() });
+            identifiers.push(self.cur_token.clone().to_string());
         }
 
         if !self.expect_peek(lexer::Token::RPAREN) {
@@ -462,7 +468,7 @@ impl<'a> Parser<'a> {
             return None;
         }
         let body = self.parse_block_statement()?;
-        Some(Expression::Fn(Fn{ params, body: Box::new(body) }))
+        Some(Expression::Fn{ params, body })
     }
 
     fn parse_if_expression(&mut self) -> Option<Expression> {

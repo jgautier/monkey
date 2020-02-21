@@ -115,7 +115,7 @@ impl Object for ObjectType {
         string.value.to_string()
       }
       ObjectType::Function(func) => {
-        let params = func.params.clone().into_iter().map(|p| p.identifier).collect::<Vec<String>>().join(",");
+        let params = func.params.join(",");
         let strings = vec![
           format!("fn({}) {{", params),
           func.body.to_string(),
@@ -157,7 +157,7 @@ pub struct Null {}
 
 #[derive(Debug, Clone)]
 pub struct Function {
-  params: Vec<ast::Identifier>,
+  params: Vec<String>,
   body: ast::BlockStatement,
   env: Rc<RefCell<Environment>>
 }
@@ -497,8 +497,8 @@ impl Evaluator {
           }
         }
       }
-      ast::Expression::Fn(fn_expr) => {
-        ObjectType::Function(Function { params: fn_expr.params, body: *fn_expr.body, env: Rc::clone(env) })
+      ast::Expression::Fn{ params, body } => {
+        ObjectType::Function(Function { params, body, env: Rc::clone(env) })
       },
       ast::Expression::StringLiteral(value) => {
         ObjectType::StringObj(StringObj{ value })
