@@ -569,8 +569,8 @@ impl Evaluator {
       ast::StatementType::Expression(expr) => {
         self.eval_expression(expr.expr, env)
       },
-      ast::StatementType::Return(ret_stmt) => {
-        let ret = self.eval_expression(*ret_stmt.value, env);
+      ast::StatementType::Return(value) => {
+        let ret = self.eval_expression(value, env);
         if let ObjectType::Error(_) = ret {
           return ret
         }

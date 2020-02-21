@@ -10,7 +10,7 @@ pub trait Node {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StatementType {
     Let{ identifier: String, value: Expression },
-    Return(ReturnStatement),
+    Return(Expression),
     Expression(ExpressionStatement)
 }
 
@@ -20,7 +20,9 @@ impl Node for StatementType {
             StatementType::Let{ identifier, value} => {
                 format!("let {} = {};\n", identifier.to_string(), value.to_string())
             },
-            StatementType::Return(stmt) => stmt.to_string(),
+            StatementType::Return(expr) => {
+               format!("return {};\n", expr.to_string())
+            },
             StatementType::Expression(stmt) => stmt.to_string()
         }
     }
@@ -45,29 +47,6 @@ pub struct Identifier {
 impl Node for Identifier {
     fn to_string(&self) -> String {
         self.identifier.to_string()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct LetStatement {
-    pub name: Identifier,
-    pub value: Box<Expression> 
-}
-
-impl Node for LetStatement {
-    fn to_string(&self) -> String {
-        format!("let {} = {};\n", self.name.identifier.to_string(), self.value.to_string())
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ReturnStatement {
-    pub value: Box<Expression> 
-}
-
-impl Node for ReturnStatement {
-    fn to_string(&self) -> String {
-        format!("return {};\n", self.value.to_string())
     }
 }
 
@@ -368,9 +347,7 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
 
-        Some(StatementType::Return(ReturnStatement{
-            value: Box::new(value)
-        }))
+        Some(StatementType::Return(value))
     }
     fn parse_let_statment(&mut self) -> Option<StatementType> {
         self.next_token();
@@ -696,8 +673,8 @@ mod tests {
 
     fn test_return_statement(statement: &StatementType, value: i64) {
         match statement {
-            StatementType::Return(statement) => {
-                if let Expression::IntegerLiteral(expr) = &*statement.value {
+            StatementType::Return(val) => {
+                if let Expression::IntegerLiteral(expr) = val {
                     assert_eq!(expr.value, value);
                 }
             },
