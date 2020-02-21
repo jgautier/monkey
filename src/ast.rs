@@ -238,10 +238,10 @@ pub enum Expression {
     StringLiteral(String),
     ArrayLiteral(Vec<Expression>),
     HashLiteral(HashLiteral),
-    Prefix{ operator: String, right: Box<Expression>},
-    Infix{ operator: String, left: Box<Expression>, right: Box<Expression>},
+    Prefix{ operator: String, right: Box<Expression> },
+    Infix{ operator: String, left: Box<Expression>, right: Box<Expression> },
     Boolean(bool),
-    If(If),
+    If{ condition: Box<Expression>, consequence: BlockStatement, alternative: Option<BlockStatement> },
     Fn(Fn),
     Call(Call),
     Index(Index)
@@ -256,11 +256,23 @@ impl Node for Expression {
             Expression::Prefix{ operator, right } => {
                 format!("({}{})", operator, right.to_string())
             },
-            Expression::Infix{ operator, left, right} => {
+            Expression::Infix{ operator, left, right } => {
                 format!("({} {} {})", left.to_string(), operator, right.to_string())
             },
             Expression::Boolean(boolean) => boolean.to_string(),
-            Expression::If(if_expr) => if_expr.to_string(),
+            Expression::If{ condition, consequence, alternative } => {
+                let mut strs = Vec::<String>::new();
+                strs.push("if ".to_string());
+                strs.push(condition.to_string());
+                strs.push(" ".to_string());
+                strs.push(consequence.to_string());
+                if let Some(alternative) = alternative {
+                    strs.push(" else ".to_string());
+                    strs.push(alternative.to_string());
+                };
+                strs.push(";".to_string());
+                strs.concat()
+            },
             Expression::Fn(fn_expr) => fn_expr.to_string(),
             Expression::Call(call_expr) => call_expr.to_string(),
             Expression::ArrayLiteral(exprs) => {
@@ -478,7 +490,7 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
-        Some(Expression::If(If { condition: Box::new(condition), consequence, alternative }))
+        Some(Expression::If { condition: Box::new(condition), consequence, alternative })
     }
 
     fn parse_block_statement(&mut self) -> Option<BlockStatement> {

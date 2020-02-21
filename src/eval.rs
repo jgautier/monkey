@@ -407,8 +407,8 @@ impl Evaluator {
       ast::Expression::Boolean(value) => {
         ObjectType::Boolean(Boolean { value })
       },
-      ast::Expression::If(i) => {
-        self.eval_if_expression(i, env)
+      ast::Expression::If{ condition, consequence, alternative } => {
+        self.eval_if_expression(condition, consequence, alternative, env)
       },
       ast::Expression::Identifier(id) => {
         match env.borrow().get(id.to_string()) {
@@ -545,15 +545,15 @@ impl Evaluator {
       }
     }
   }
-  fn eval_if_expression(&self, if_expr: ast::If, env: &Rc<RefCell<Environment>>) -> ObjectType {
-    let condition = self.eval_expression(*if_expr.condition, env);
+  fn eval_if_expression(&self, condition: Box<ast::Expression>, consequence: ast::BlockStatement, alternative: Option<ast::BlockStatement>, env: &Rc<RefCell<Environment>>) -> ObjectType {
+    let condition = self.eval_expression(condition.as_ref().clone(), env);
     if let ObjectType::Error(_) = condition {
       return condition
     }
     if is_truthy(condition) {
-      self.eval_block_statements(if_expr.consequence.statements, env)
+      self.eval_block_statements(consequence.statements, env)
     } else {
-      match if_expr.alternative {
+      match alternative {
         Some(block) => {
           self.eval_block_statements(block.statements, env)
         },
