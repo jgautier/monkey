@@ -20,8 +20,11 @@ impl Node for StatementType {
             StatementType::Let{ identifier, value} => {
                 format!("let {} = {};\n", identifier.to_string(), value.to_string())
             },
-            StatementType::Return(expr) | StatementType::Expression(expr) => {
+            StatementType::Return(expr)=> {
                format!("return {};\n", expr.to_string())
+            },
+            StatementType::Expression(expr) => {
+                expr.to_string()
             }
         }
     }
