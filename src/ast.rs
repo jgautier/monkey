@@ -238,7 +238,7 @@ pub enum Expression {
     StringLiteral(String),
     ArrayLiteral(ArrayLiteral),
     HashLiteral(HashLiteral),
-    Prefix(Prefix),
+    Prefix{ operator: String, right: Box<Expression>},
     Infix(Infix),
     Boolean(Boolean),
     If(If),
@@ -253,7 +253,9 @@ impl Node for Expression {
             Expression::Identifier(id) => id.to_string(),
             Expression::IntegerLiteral(int) => int.to_string(),
             Expression::StringLiteral(string) => format!("\"{}\"", string.to_string()),
-            Expression::Prefix(pre) => pre.to_string(),
+            Expression::Prefix{ operator, right } => {
+                format!("({}{})", operator, right.to_string())
+            },
             Expression::Infix(inf) => inf.to_string(),
             Expression::Boolean(boolean) => boolean.to_string(),
             Expression::If(if_expr) => if_expr.to_string(),
@@ -523,7 +525,7 @@ impl<'a> Parser<'a> {
         self.next_token();
         match self.parse_expression(OperatorPrecedence::PREFIX) {
             Some(expr) => {
-                Some(Expression::Prefix(Prefix{ operator, right: Box::new(expr) }))
+                Some(Expression::Prefix{ operator, right: Box::new(expr) })
             },
             None => None
         }
@@ -769,9 +771,9 @@ mod tests {
         match &program.statements[0] {
             Statement::Expression(expr) => {
                 match expr {
-                    Expression::Prefix(expr) => {
-                        assert_eq!(expr.operator, "!");
-                        match &*expr.right {
+                    Expression::Prefix{ operator, right } => {
+                        assert_eq!(operator, "!");
+                        match right.as_ref() {
                             Expression::IntegerLiteral(i) => {
                                 assert_eq!(*i, 5)
                             },

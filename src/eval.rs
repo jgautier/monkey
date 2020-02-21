@@ -394,12 +394,12 @@ impl Evaluator {
         }
         eval_infix_expression(&expr.operator, left, right)
       },
-      ast::Expression::Prefix(expr) => {
-        let right = self.eval_expression(*expr.right, env);
+      ast::Expression::Prefix{ operator, right} => {
+        let right = self.eval_expression(right.as_ref().clone(), env);
         if let ObjectType::Error(_) = right {
           return right
         }
-        eval_prefix_expression(&expr.operator, right)
+        eval_prefix_expression(&operator, right)
       },
       ast::Expression::IntegerLiteral(int) => {
         ObjectType::Integer(Integer { value: int })
