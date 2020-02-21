@@ -42,74 +42,6 @@ impl Node for Program {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Identifier {
-    pub identifier: String
-}
-
-impl Node for Identifier {
-    fn to_string(&self) -> String {
-        self.identifier.to_string()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct IntegerLiteral {
-    pub value: i64
-}
-
-impl Node for IntegerLiteral {
-    fn to_string(&self) -> String {
-        format!("{}", self.value)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct StringLiteral {
-    pub value: String
-}
-
-impl Node for StringLiteral {
-    fn to_string(&self) -> String {
-        format!("\"{}\"", self.value)
-    }
-}
-
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Prefix {
-    pub operator: String,
-    pub right: Box<Expression>
-}
-
-impl Node for Prefix {
-    fn to_string(&self) -> String {
-        format!("({}{})", self.operator, self.right.to_string())
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Infix {
-    pub operator: String,
-    pub right: Box<Expression>,
-    pub left: Box<Expression>
-}
-
-impl Node for Infix {
-    fn to_string(&self) -> String {
-        format!("({} {} {})", self.left.to_string(), self.operator, self.right.to_string())
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Boolean {
-    pub value: bool
-}
-impl Node for Boolean {
-    fn to_string(&self) -> String {
-        format!("{}", self.value)
-    }
-}
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BlockStatement {
     pub statements: Vec<Statement>
 }
@@ -117,75 +49,6 @@ impl Node for BlockStatement {
     fn to_string(&self) -> String {
         let statement_strs = self.statements.iter().map(|node| node.clone().to_string()).collect::<Vec<String>>();
         format!("{{ {} }}", statement_strs.concat())
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct If {
-    pub condition: Box<Expression>,
-    pub consequence: BlockStatement,
-    pub alternative: Option<BlockStatement>
-}
-
-impl Node for If {
-    fn to_string(&self) -> String {
-        let mut strs = Vec::<String>::new();
-        strs.push("if ".to_string());
-        strs.push(self.condition.to_string());
-        strs.push(" ".to_string());
-        strs.push(self.consequence.to_string());
-        if let Some(alternative) = &self.alternative {
-            strs.push(" else ".to_string());
-            strs.push(alternative.to_string());
-        };
-        strs.push(";".to_string());
-        strs.concat()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Fn {
-    pub params: Vec<Identifier>,
-    pub body: Box<BlockStatement>
-}
-
-impl Node for Fn {
-    fn to_string(&self) -> String {
-        let mut strs = vec!["fn(".to_string()];
-        strs.push(self.params.iter().map(|param| param.to_string()).collect::<Vec<String>>().join(", "));
-        strs.push((") ").to_string());
-        strs.push(self.body.to_string());
-        strs.concat()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Call {
-    pub function: Box<Expression>,
-    pub args: Vec<Expression>
-}
-
-impl Node for Call {
-    fn to_string(&self) -> String {
-        let mut strs = vec![self.function.to_string()];
-        strs.push("(".to_string());
-        strs.push(self.args.iter().map(|arg| arg.to_string()).collect::<Vec<String>>().join(", "));
-        strs.push((")").to_string());
-        strs.concat()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ArrayLiteral {
-    pub elements: Vec<Expression>
-}
-
-impl Node for ArrayLiteral {
-    fn to_string(&self) -> String {
-        let mut strs = vec!["[".to_string()];
-        strs.push(self.elements.iter().map(|el| el.to_string()).collect::<Vec<String>>().join(", "));
-        strs.push("]".to_string());
-        strs.concat()
     }
 }
 
@@ -211,22 +74,6 @@ impl Node for HashLiteral {
         let mut strs = vec!["{".to_string()];
         strs.push(self.pairs.iter().map(|pair| format!("{}: {}", pair.0.to_string(), pair.1.to_string())).collect::<Vec<String>>().join(", "));
         strs.push("}".to_string());
-        strs.concat()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Index {
-    pub left: Box<Expression>,
-    pub index: Box<Expression>
-}
-
-impl Node for Index {
-    fn to_string(&self) -> String {
-        let mut strs = vec!["(".to_string()];
-        strs.push(self.left.to_string());
-        strs.push("[".to_string());
-        strs.push("])".to_string());
         strs.concat()
     }
 }
