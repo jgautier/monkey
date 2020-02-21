@@ -233,7 +233,7 @@ impl Node for Index {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Expression {
-    Identifier(Identifier),
+    Identifier(String),
     IntegerLiteral(IntegerLiteral),
     StringLiteral(StringLiteral),
     ArrayLiteral(ArrayLiteral),
@@ -250,7 +250,7 @@ pub enum Expression {
 impl Node for Expression {
     fn to_string(&self) -> String {
         match self {
-            Expression::Identifier(ident) => ident.to_string(),
+            Expression::Identifier(id) => id.to_string(),
             Expression::IntegerLiteral(int) => int.to_string(),
             Expression::StringLiteral(string) => string.to_string(),
             Expression::Prefix(pre) => pre.to_string(),
@@ -497,7 +497,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_identifier_expression(&mut self) -> Expression {
-        Expression::Identifier(Identifier{ identifier: self.cur_token.clone().to_string() })
+        Expression::Identifier(self.cur_token.clone().to_string())
     }
 
     fn parse_integer_literal_expression(&mut self) -> Option<Expression> {

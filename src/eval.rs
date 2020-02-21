@@ -450,7 +450,7 @@ impl Evaluator {
                 }
               }
               None => {
-                ObjectType::Error(format!("identifier not found: {}", id.to_string()))
+                ObjectType::Error(format!("identifier not found: {}", id))
               }
             }
           }
