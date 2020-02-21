@@ -564,26 +564,26 @@ impl Evaluator {
     }
   }
 
-  fn eval_statement(&self, node: ast::StatementType, env: &Rc<RefCell<Environment>>) -> ObjectType {
+  fn eval_statement(&self, node: ast::Statement, env: &Rc<RefCell<Environment>>) -> ObjectType {
     match node {
-      ast::StatementType::Expression(expr) => {
+      ast::Statement::Expression(expr) => {
         self.eval_expression(expr, env)
       },
-      ast::StatementType::Return(value) => {
+      ast::Statement::Return(value) => {
         let ret = self.eval_expression(value, env);
         if let ObjectType::Error(_) = ret {
           return ret
         }
         ObjectType::Return(Box::new(ret))
       },
-      ast::StatementType::Let{ identifier, value} => {
+      ast::Statement::Let{ identifier, value} => {
         let ret = self.eval_expression(value, env);
         env.borrow_mut().set(identifier, &ret);
         ObjectType::Null(Null {})
       }
     }
   }
-  pub fn eval_block_statements(&self, stmts: Vec<ast::StatementType>, env: &Rc<RefCell<Environment>>) -> ObjectType {
+  pub fn eval_block_statements(&self, stmts: Vec<ast::Statement>, env: &Rc<RefCell<Environment>>) -> ObjectType {
     let mut result = ObjectType::Null(Null {});
     for stmt in stmts {
       result = self.eval_statement(stmt, env);

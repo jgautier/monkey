@@ -8,22 +8,22 @@ pub trait Node {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum StatementType {
+pub enum Statement {
     Let{ identifier: String, value: Expression },
     Return(Expression),
     Expression(Expression)
 }
 
-impl Node for StatementType {
+impl Node for Statement {
     fn to_string(&self) -> String {
         match self {
-            StatementType::Let{ identifier, value} => {
+            Statement::Let{ identifier, value} => {
                 format!("let {} = {};\n", identifier.to_string(), value.to_string())
             },
-            StatementType::Return(expr)=> {
+            Statement::Return(expr)=> {
                format!("return {};\n", expr.to_string())
             },
-            StatementType::Expression(expr) => {
+            Statement::Expression(expr) => {
                 expr.to_string()
             }
         }
@@ -31,7 +31,7 @@ impl Node for StatementType {
 }
 
 pub struct Program {
-    pub statements: Vec<StatementType>
+    pub statements: Vec<Statement>
 }
 
 impl Node for Program {
@@ -111,7 +111,7 @@ impl Node for Boolean {
 }
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BlockStatement {
-    pub statements: Vec<StatementType>
+    pub statements: Vec<Statement>
 }
 impl Node for BlockStatement {
     fn to_string(&self) -> String {
@@ -320,7 +320,7 @@ impl<'a> Parser<'a> {
 
     pub fn parse(&mut self) -> Program {
         let mut program = Program {
-            statements: Vec::<StatementType>::new()
+            statements: Vec::<Statement>::new()
         };
         while self.cur_token != lexer::Token::EOF {
             if let Some(statement) = self.parse_statement() {
@@ -330,7 +330,7 @@ impl<'a> Parser<'a> {
         }
         program
     }
-    fn parse_return_statement(&mut self) -> Option<StatementType> {
+    fn parse_return_statement(&mut self) -> Option<Statement> {
         self.next_token();
 
         let value = self.parse_expression(OperatorPrecedence::LOWEST).unwrap();
@@ -339,9 +339,9 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
 
-        Some(StatementType::Return(value))
+        Some(Statement::Return(value))
     }
-    fn parse_let_statment(&mut self) -> Option<StatementType> {
+    fn parse_let_statment(&mut self) -> Option<Statement> {
         self.next_token();
         if let lexer::Token::IDENT(_) = self.cur_token {
             let identifier = self.cur_token.clone().to_string();
@@ -356,14 +356,14 @@ impl<'a> Parser<'a> {
                 self.next_token();
             }
 
-            Some(StatementType::Let{ identifier, value })
+            Some(Statement::Let{ identifier, value })
         } else {
             None
         }
       
     }
 
-    fn parse_statement(&mut self) -> Option<StatementType> {
+    fn parse_statement(&mut self) -> Option<Statement> {
         match self.cur_token {
             lexer::Token::LET => self.parse_let_statment(),
             lexer::Token::RETURN => self.parse_return_statement(),
@@ -371,12 +371,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expression_statement(&mut self) -> Option<StatementType> {
+    fn parse_expression_statement(&mut self) -> Option<Statement> {
         let expression = self.parse_expression(OperatorPrecedence::LOWEST)?;
         if self.peek_token == lexer::Token::SEMICOLON {
             self.next_token();
         }
-        Some(StatementType::Expression(expression))
+        Some(Statement::Expression(expression))
     }
 
     fn parse_expression(&mut self, precedence: OperatorPrecedence) -> Option<Expression> {
@@ -646,9 +646,9 @@ mod tests {
             println!("Parse Error: {}", msg);
         }
     }
-    fn test_let_statement(statement: &StatementType, name: &str, val: i64) {
+    fn test_let_statement(statement: &Statement, name: &str, val: i64) {
         match statement {
-            StatementType::Let{ identifier, value } => {
+            Statement::Let{ identifier, value } => {
                 assert_eq!(identifier, name);
                 if let Expression::IntegerLiteral(expr) = value {
                     assert_eq!(expr.value, val);
@@ -660,9 +660,9 @@ mod tests {
         }
     }
 
-    fn test_return_statement(statement: &StatementType, value: i64) {
+    fn test_return_statement(statement: &Statement, value: i64) {
         match statement {
-            StatementType::Return(val) => {
+            Statement::Return(val) => {
                 if let Expression::IntegerLiteral(expr) = val {
                     assert_eq!(expr.value, value);
                 }
@@ -712,7 +712,7 @@ mod tests {
     fn to_string() {
         Program {
             statements: vec![
-                StatementType::Let{ identifier: "myVar".to_string(), value: Expression::IntegerLiteral(IntegerLiteral { value: 5 })}
+                Statement::Let{ identifier: "myVar".to_string(), value: Expression::IntegerLiteral(IntegerLiteral { value: 5 })}
             ]
         };
     }
@@ -728,7 +728,7 @@ mod tests {
         check_parse_errors(parser);
         assert_eq!(program.statements.len(), 1);
         match &program.statements[0] {
-            StatementType::Expression(_) => {      
+            Statement::Expression(_) => {      
             },
             _ => panic!("wrong statement type")
         }
@@ -744,7 +744,7 @@ mod tests {
         check_parse_errors(parser);
         assert_eq!(program.statements.len(), 1);
         match &program.statements[0] {
-            StatementType::Expression(expr) => {
+            Statement::Expression(expr) => {
                 match expr {
                     Expression::IntegerLiteral(expr) =>  assert_eq!(expr.value, 5i64),
                     _ => {
@@ -767,7 +767,7 @@ mod tests {
         check_parse_errors(parser);
         assert_eq!(program.statements.len(), 1);
         match &program.statements[0] {
-            StatementType::Expression(expr) => {
+            Statement::Expression(expr) => {
                 match expr {
                     Expression::Prefix(expr) => {
                         assert_eq!(expr.operator, "!");
@@ -808,7 +808,7 @@ mod tests {
             check_parse_errors(parser);
             assert_eq!(program.statements.len(), 1);
             match &program.statements[0] {
-                StatementType::Expression(expr) => {
+                Statement::Expression(expr) => {
                     match expr {
                         Expression::Infix(expr) => {
                             assert_eq!(expr.operator, expression.2);
@@ -853,7 +853,7 @@ mod tests {
             check_parse_errors(parser);
             assert_eq!(program.statements.len(), 1);
             match &program.statements[0] {
-                StatementType::Expression(expr) => {
+                Statement::Expression(expr) => {
                     match expr {
                         Expression::Infix(expr) => {
                             assert_eq!(expr.operator, expression.2);
@@ -898,7 +898,7 @@ mod tests {
             check_parse_errors(parser);
             assert_eq!(program.statements.len(), 1);
             match &program.statements[0] {
-                StatementType::Expression(expr) => {
+                Statement::Expression(expr) => {
                     match expr {
                         Expression::Index(expr) => {
                             assert_eq!(expr.left.to_string(), expression.1);
