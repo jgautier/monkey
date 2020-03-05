@@ -4,11 +4,6 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-pub trait Object {
-  fn object_type(&self) -> String;
-  fn inspect(&self) -> String;
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum HashKey {
   Integer(i64),
@@ -16,21 +11,8 @@ pub enum HashKey {
   Boolean(bool)
 }
 
-impl Object for HashKey {
-  fn object_type(&self) -> String {
-    match self {
-      HashKey::Integer(_) => {
-        "INTEGER".to_string()
-      },
-      HashKey::Boolean(_) => {
-        "BOOLEAN".to_string()
-      },
-      HashKey::String(_) => {
-        "STRING".to_string()
-      }
-    }
-  }
-  fn inspect(&self) -> String {
+impl HashKey {
+  pub fn inspect(&self) -> String {
     match self {
       HashKey::Integer(i) => {
         format!("{}", i)
@@ -46,90 +28,90 @@ impl Object for HashKey {
 }
 
 #[derive(Debug, Clone)]
-pub enum ObjectType {
+pub enum Object {
   Integer(i64),
   String(String),
   Boolean(bool),
   Null,
-  Return(Box<ObjectType>),
-  Function{ params: Vec<String>, body: ast::BlockStatement, env: Rc<RefCell<Environment>> },
-  BuiltIn(fn(Vec<ObjectType>) -> ObjectType),
-  Array(Vec<ObjectType>),
-  Hash(HashMap<HashKey, ObjectType>),
+  Return(Rc<Object>),
+  Function{ params: Vec<String>, body: ast::BlockStatement, env: Env },
+  BuiltIn(fn(Vec<Rc<Object>>) -> Rc<Object>),
+  Array(Vec<Rc<Object>>),
+  Hash(HashMap<HashKey, Rc<Object>>),
   Error(String)
 }
 
-impl Object for ObjectType {
-  fn object_type(&self) -> String {
+impl Object {
+  pub fn object_type(&self) -> String {
     match self {
-      ObjectType::Integer(_) => {
+      Object::Integer(_) => {
         "INTEGER".to_string()
       },
-      ObjectType::Boolean(_) => {
+      Object::Boolean(_) => {
         "BOOLEAN".to_string()
       },
-      ObjectType::Null => {
+      Object::Null => {
         "NULL".to_string()
       },
-      ObjectType::Return(_) => {
+      Object::Return(_) => {
         "RETURN".to_string()
       },
-      ObjectType::Error(_) => {
+      Object::Error(_) => {
         "ERROR".to_string()
       },
-      ObjectType::Function{..} => {
+      Object::Function{..} => {
         "FUNCTION".to_string()
       },
-      ObjectType::String(_) => {
+      Object::String(_) => {
         "STRING".to_string()
       },
-      ObjectType::BuiltIn(_) => {
+      Object::BuiltIn(_) => {
         "BUILTIN".to_string()
       },
-      ObjectType::Array(_) => {
+      Object::Array(_) => {
         "ARRAY".to_string()
       },
-      ObjectType::Hash(_) => {
+      Object::Hash(_) => {
         "HASH".to_string()
       }
     }
   }
-  fn inspect(&self) -> String {
+  pub fn inspect(&self) -> String {
     match self {
-      ObjectType::Integer(i) => {
+      Object::Integer(i) => {
         format!("{}", i)
       },
-      ObjectType::Boolean(b) => {
+      Object::Boolean(b) => {
         format!("{}", b)
       },
-      ObjectType::Null => {
+      Object::Null => {
         "null".to_string()
       },
-      ObjectType::Return(obj) => {
+      Object::Return(obj) => {
         obj.inspect()
       },
-      ObjectType::Error(err_str) => {
+      Object::Error(err_str) => {
         err_str.to_string()
       },
-      ObjectType::String(string) => {
+      Object::String(string) => {
         string.to_string()
       }
-      ObjectType::Function{ params, body, ..} => {
+      Object::Function{ params, body, ..} => {
         let params = params.join(",");
         let strings = vec![
           format!("fn({}) {{", params), body.to_string(), "}}".to_string()
         ];
         strings.join("\n")
       },
-      ObjectType::BuiltIn(_) => {
+      Object::BuiltIn(_) => {
         "builtin function".to_string()
       }
-      ObjectType::Array(arr) => {
-        let els = arr.clone().into_iter().map(|el| el.inspect()).collect::<Vec<String>>().join(",");
+      Object::Array(arr) => {
+        let els = arr.iter().map(|el| el.inspect()).collect::<Vec<String>>().join(",");
         format!("[{}]", els)
       }
-      ObjectType::Hash(hash) => {
-        let pairs = hash.clone().into_iter().map(|pair| format!("{}: {}", pair.0.inspect(), pair.1.inspect())).collect::<Vec<String>>().join(", ");
+      Object::Hash(hash) => {
+        let pairs = hash.iter().map(|pair| format!("{}: {}", pair.0.inspect(), pair.1.inspect())).collect::<Vec<String>>().join(", ");
         format!("{{{}}}", pairs)
       }
     }
@@ -138,18 +120,18 @@ impl Object for ObjectType {
 
 #[derive(Debug)]
 pub struct Environment {
-  store: HashMap<String, ObjectType>,
-  outer: Option<Rc<RefCell<Environment>>>
+  store: HashMap<String, Rc<Object>>,
+  outer: Option<Env>
 }
 
 impl Environment {
-  pub fn new(outer: Option<Rc<RefCell<Environment>>>) -> Self {
+  pub fn new(outer: Option<Env>) -> Self {
     Self {
       store: HashMap::new(),
       outer
     }
   }
-  fn get(&self, var_name: String) -> Option<ObjectType> {
+  fn get(&self, var_name: String) -> Option<Rc<Object>> {
     let val = self.store.get(&var_name);
     if let Some(value) = val {
       return Some(value.clone());
@@ -159,116 +141,120 @@ impl Environment {
     }
     None
   }
-  fn set(&mut self, var_name: String, value: &ObjectType) {
-    self.store.insert(var_name, value.clone());
+  fn set(&mut self, var_name: String, value: Rc<Object>) {
+    self.store.insert(var_name, value);
   }
 }
 
+type Env = Rc<RefCell<Environment>>;
+
 pub struct Evaluator {
-  env: Rc<RefCell<Environment>>,
-  built_ins: HashMap<String, ObjectType>
+  env: Env,
+  built_ins: HashMap<String, Object>,
+  null: Rc<Object>
 }
 
 impl Evaluator {
   pub fn new() -> Evaluator {
     let mut built_ins = HashMap::new();
-    built_ins.insert("len".to_string(), ObjectType::BuiltIn(|args: Vec<ObjectType>| -> ObjectType {
+    built_ins.insert("len".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
       if args.len() > 1 {
-        return ObjectType::Error(format!("Expected 1 argument got {}", args.len()));
+        return Rc::new(Object::Error(format!("Expected 1 argument got {}", args.len())));
       }
-      match &args[0] {
-        ObjectType::String(string) => {
-          ObjectType::Integer(string.len() as i64)
+      match &*args[0] {
+        Object::String(string) => {
+          Rc::new(Object::Integer(string.len() as i64))
         },
-        ObjectType::Array(arr) => {
-          ObjectType::Integer(arr.len() as i64)
+        Object::Array(arr) => {
+          Rc::new(Object::Integer(arr.len() as i64))
         },
         _=> {
-          ObjectType::Error(format!("Expected a String or Array got a {}", args[0].object_type()))
+          Rc::new(Object::Error(format!("Expected a String or Array got a {}", args[0].object_type())))
         }
       }
     }));
-    built_ins.insert("first".to_string(), ObjectType::BuiltIn(|args: Vec<ObjectType>| -> ObjectType {
+    built_ins.insert("first".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
       if args.len() > 1 {
-        return ObjectType::Error(format!("Expected 1 argument got {}", args.len()));
+        return Rc::new(Object::Error(format!("Expected 1 argument got {}", args.len())))
       }
-      match &args[0] {
-        ObjectType::Array(arr) => {
+      match &*args[0] {
+        Object::Array(arr) => {
           arr[0].clone()
         },
         _=> {
-          ObjectType::Error(format!("Expected a Array got a {}", args[0].object_type()))
+          Rc::new(Object::Error(format!("Expected a Array got a {}", args[0].object_type())))
         }
       }
     }));
-    built_ins.insert("last".to_string(), ObjectType::BuiltIn(|args: Vec<ObjectType>| -> ObjectType {
+    built_ins.insert("last".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
       if args.len() > 1 {
-        return ObjectType::Error(format!("Expected 1 argument got {}", args.len()));
+        return Rc::new(Object::Error(format!("Expected 1 argument got {}", args.len())));
       }
-      match &args[0] {
-        ObjectType::Array(arr) => {
+      match &*args[0] {
+        Object::Array(arr) => {
           if let Some(obj) = arr.last() {
             return obj.clone()
           }
-          ObjectType::Null
+          Rc::new(Object::Null)
         },
         _=> {
-          ObjectType::Error(format!("Expected a Array got a {}", args[0].object_type()))
+          Rc::new(Object::Error(format!("Expected a Array got a {}", args[0].object_type())))
         }
       }
     }));
-    built_ins.insert("rest".to_string(), ObjectType::BuiltIn(|args: Vec<ObjectType>| -> ObjectType {
+    built_ins.insert("rest".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
       if args.len() > 1 {
-        return ObjectType::Error(format!("Expected 1 argument got {}", args.len()));
+        return Rc::new(Object::Error(format!("Expected 1 argument got {}", args.len())));
       }
-      match &args[0] {
-        ObjectType::Array(arr) => {
+      match &*args[0] {
+        Object::Array(arr) => {
           if let Some((_, elements)) = arr.split_first() {
-            ObjectType::Array(elements.to_vec())
+            Rc::new(Object::Array(elements.to_vec()))
           } else {
-            ObjectType::Null
+            Rc::new(Object::Null)
           }
         },
         _=> {
-          ObjectType::Error(format!("Expected a Array got a {}", args[0].object_type()))
+          Rc::new(Object::Error(format!("Expected a Array got a {}", args[0].object_type())))
         }
       }
     }));
-    built_ins.insert("push".to_string(), ObjectType::BuiltIn(|args: Vec<ObjectType>| -> ObjectType {
+    built_ins.insert("push".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
       if args.len() > 2 {
-        return ObjectType::Error(format!("Expected 2 argument got {}", args.len()));
+        return Rc::new(Object::Error(format!("Expected 2 argument got {}", args.len())))
       }
-      match &args[0] {
-        ObjectType::Array(arr) => {
+      match &*args[0] {
+        Object::Array(arr) => {
           let mut new_arr = arr.to_vec();
           new_arr.push(args[1].clone());
-          ObjectType::Array(new_arr)
+          Rc::new(Object::Array(new_arr))
         },
         _=> {
-          ObjectType::Error(format!("Expected a Array got a {}", args[0].object_type()))
+          Rc::new(Object::Error(format!("Expected a Array got a {}", args[0].object_type())))
         }
       }
     }));
-    built_ins.insert("puts".to_string(), ObjectType::BuiltIn(|args: Vec<ObjectType>| -> ObjectType {
+    built_ins.insert("puts".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
       for arg in args {
         println!("{}", arg.inspect())
       }
-      ObjectType::Null
+      Rc::new(Object::Null)
     }));
     Self {
       env: Rc::new(RefCell::new(Environment::new(None))),
-      built_ins
+      built_ins,
+      null: Rc::new(Object::Null)
     }
   }
-  pub fn eval_program(&self, prog: ast::Program) -> ObjectType {
-    let mut result = ObjectType::Null;
+  pub fn eval_program(&self, prog: ast::Program) -> Rc<Object> {
+    let mut result = self.null.clone();
     for stmt in prog.statements {
-      result = self.eval_statement(stmt, &self.env);
-      match result {
-        ObjectType::Return(obj) => {
-          return *obj
+      result = self.eval_statement(&stmt, &self.env);
+      match &*result {
+        Object::Return(obj) => {
+          return obj.clone()
         },
-        ObjectType::Error(_) => {
+        Object::Error(_) => {
           return result
         }
         _=> {}
@@ -276,205 +262,237 @@ impl Evaluator {
     }
     result
   }
-  fn eval_expression(&self, expr: ast::Expression, environment: &Rc<RefCell<Environment>>) -> ObjectType {
+  pub fn error(&self, msg: &str) -> Rc<Object> {
+    Rc::new(Object::Error(msg.to_string()))
+  }
+  fn eval_expression(&self, expr: &ast::Expression, environment: &Env) -> Rc<Object> {
     match expr {
       ast::Expression::Index{ left, index } => {
-        let left = self.eval_expression(left.as_ref().clone(), environment);
-        if let ObjectType::Error(_) = left {
-          return left
-        }
-        let index = self.eval_expression(index.as_ref().clone(), environment);
-        if let ObjectType::Error(_) = index {
-          return index
-        }
-        match (&left, &index) {
-          (ObjectType::Array(left), ObjectType::Integer(index)) => {
-            if let Some(obj) = left.get(*index as usize) {
-              return obj.clone()
-            }
-          },
-          (ObjectType::Hash(left), ObjectType::Integer(i)) => {
-            if let Some(obj) = left.get(&HashKey::Integer(*i)) {
-              return obj.clone()
-            }
-          },
-          (ObjectType::Hash(left), ObjectType::String(string)) => {
-            if let Some(obj) = left.get(&HashKey::String(string.to_string())) {
-              return obj.clone()
-            }
-          },
-          (ObjectType::Hash(left), ObjectType::Boolean(boolean)) => {
-            if let Some(obj) = left.get(&HashKey::Boolean(*boolean)) {
-              return obj.clone()
-            }
-          },
-          _ => {
-            return ObjectType::Error(format!("Expecting ARRAY and INTEGER found {} and {}", left.object_type(), index.object_type()))
-          }
-        };
-        ObjectType::Null
+        self.eval_index_expression(left, index, environment)
       }
       ast::Expression::Infix{ operator, left, right } => {
-        let left = self.eval_expression(left.as_ref().clone(), environment);
-        if let ObjectType::Error(_) = left {
-          return left
-        }
-        let right = self.eval_expression(right.as_ref().clone(), environment);
-        if let ObjectType::Error(_) = right {
-          return right
-        }
-        eval_infix_expression(&operator, left, right)
+        self.eval_infix_expression(&operator, left, right, environment)
       },
       ast::Expression::Prefix{ operator, right} => {
-        let right = self.eval_expression(right.as_ref().clone(), environment);
-        if let ObjectType::Error(_) = right {
-          return right
-        }
-        eval_prefix_expression(&operator, right)
+        self.eval_prefix_expression(&operator, right, environment)
       },
       ast::Expression::IntegerLiteral(int) => {
-        ObjectType::Integer(int)
+        Rc::new(Object::Integer(*int))
       },
       ast::Expression::Boolean(value) => {
-        ObjectType::Boolean(value)
+        Rc::new(Object::Boolean(*value))
       },
       ast::Expression::If{ condition, consequence, alternative } => {
         self.eval_if_expression(condition, consequence, alternative, environment)
       },
       ast::Expression::Identifier(id) => {
-        if let Some(obj) = environment.borrow().get(id.to_string()) {
-          return obj
-        }
-        if let Some(obj) = self.built_ins.get(&id.to_string()) {
-          return obj.clone()
-        }
-        ObjectType::Error(format!("identifier not found: {}", id))
+        self.eval_identifier(id, environment)
       },
       ast::Expression::Call{ function, args } => {
-        let res = self.eval_expression(function.as_ref().clone(), environment);
-        match res {
-          ObjectType::Error(_) => {
-            res
-          },
-          ObjectType::Function{ params, body, env } => {
-            let mut call_args = Vec::new();
-            for arg in args {
-              let res = self.eval_expression(arg, environment);
-              if let ObjectType::Error(_) = res {
-                return res
-              }
-              call_args.push(res);
-            }
-            let mut func_env = Environment::new(Some(Rc::clone(&env)));
-            for (idx, param) in params.iter().enumerate() {
-              func_env.set(param.to_string(), &call_args[idx]);
-            }
-            let func_res = self.eval_block_statements(body.statements, &Rc::new(RefCell::new(func_env)));
-            if let ObjectType::Return(val) = func_res {
-              return *val;
-            }
-            func_res
-          },
-          ObjectType::BuiltIn(built_in) => {
-            let mut call_args = Vec::new();
-            for arg in args {
-              let res = self.eval_expression(arg, environment);
-              if let ObjectType::Error(_) = res {
-                return res
-              }
-              call_args.push(res);
-            }
-            (built_in)(call_args)
-          },
-          _ => {
-            ObjectType::Error("Not a Function".to_string())
-          }
-        }
+        self.eval_call_expression(function, args, environment)
       }
       ast::Expression::Fn{ params, body } => {
-        ObjectType::Function{ params, body, env: Rc::clone(environment) }
+        Rc::new(Object::Function{ params: params.to_vec(), body: body.clone(), env: Rc::clone(environment) })
       },
       ast::Expression::StringLiteral(value) => {
-        ObjectType::String(value)
+        Rc::new(Object::String(value.to_string()))
       },
       ast::Expression::ArrayLiteral(els) => {
-        let mut elements = Vec::new();
-        for el in els {
-          let res = self.eval_expression(el, environment);
-          if let ObjectType::Error(_) = res {
-            return res
-          }
-          elements.push(res);
-        }
-        ObjectType::Array(elements)
+        self.eval_array_literal(els, environment)
       },
       ast::Expression::HashLiteral(hash) => {
-        let mut pairs = HashMap::new();
-        for pair in hash.pairs.into_iter() {
-          let key = self.eval_expression(pair.0, environment);
-          let hash_key = match key {
-            ObjectType::String(string) => {
-              HashKey::String(string)
-            }
-            ObjectType::Integer(int) => {
-              HashKey::Integer(int)
-            }
-            ObjectType::Boolean(boolean) => {
-              HashKey::Boolean(boolean)
-            }
-            _ => {
-              return ObjectType::Error("Wrong type for hash key, must be string, integer or boolean".to_string())
-            }
-          };
-          let value = self.eval_expression(pair.1, environment);
-          if let ObjectType::Error(_) = value {
-            return value
-          }
-          pairs.insert(hash_key, value);
-        }
-        ObjectType::Hash(pairs)
+        self.eval_hash_literal(hash, environment)
       }
     }
   }
-  fn eval_if_expression(&self, condition: Box<ast::Expression>, consequence: ast::BlockStatement, alternative: Option<ast::BlockStatement>, env: &Rc<RefCell<Environment>>) -> ObjectType {
-    let condition = self.eval_expression(condition.as_ref().clone(), env);
-    if let ObjectType::Error(_) = condition {
+  fn eval_index_expression (&self, left: &ast::Expression, index: &ast::Expression, environment: &Env) -> Rc<Object> {
+    let left = self.eval_expression(&left, environment);
+    if let Object::Error(_) = *left {
+      return left
+    }
+    let index = self.eval_expression(&index, environment);
+    if let Object::Error(_) = *index {
+      return index
+    }
+    let ret = match (&*left, &*index) {
+      (Object::Array(left), Object::Integer(index)) => {
+        left.get(*index as usize)
+      },
+      (Object::Hash(left), Object::Integer(i)) => {
+        left.get(&HashKey::Integer(*i))
+      },
+      (Object::Hash(left), Object::String(string)) => {
+        left.get(&HashKey::String(string.to_string()))
+      },
+      (Object::Hash(left), Object::Boolean(boolean)) => {
+        left.get(&HashKey::Boolean(*boolean))
+      },
+      _ => {
+        return self.error(&format!("Expecting ARRAY and INTEGER found {} and {}", left.object_type(), index.object_type()));
+      }
+    };
+    ret.unwrap_or(&self.null).clone()
+  }
+  fn eval_infix_expression(&self, operator: &str, left: &ast::Expression, right: &ast::Expression, environment: &Env) -> Rc<Object> {
+    let left = self.eval_expression(&left, environment);
+    if let Object::Error(_) = *left {
+      return left
+    }
+    let right = self.eval_expression(&right, environment);
+    if let Object::Error(_) = *right {
+      return right
+    }
+    let ret = match (&*left, &*right) {
+      (Object::Integer(i1), Object::Integer(i2)) => {
+        eval_int_infix_expression(operator, *i1, *i2)
+      },
+      (Object::Boolean(b1), Object::Boolean(b2)) => {
+        eval_bool_infix_expression(operator, *b1, *b2)
+      },
+      (Object::String(s1), Object::String(s2)) => {
+        eval_string_infix_expression(operator, s1.to_string(), s2.to_string())
+      }
+      _ => {
+        Object::Error(format!("type mismatch: {} {} {}", left.object_type(), operator, right.object_type())) 
+      }
+    };
+    Rc::new(ret)
+  }
+  fn eval_prefix_expression(&self, operator: &str, right: &ast::Expression, environment: &Env) -> Rc<Object> {
+    let right = self.eval_expression(&right, environment);
+    if let Object::Error(_) = *right {
+      return right
+    }
+    Rc::new(match operator {
+      "!" => {
+        eval_bang_operator(right)  
+      }
+      "-" => {
+        eval_minus_operator(right)
+      }
+      _ => {
+        Object::Error(format!("unknown operator: {}{}", operator, right.object_type())) 
+      }
+    })
+  }
+  fn eval_identifier(&self, id: &str, environment: &Env) -> Rc<Object> {
+    if let Some(obj) = environment.borrow().get(id.to_string()) {
+      return obj
+    }
+    if let Some(obj) = self.built_ins.get(&id.to_string()) {
+      return Rc::new(obj.clone())
+    }
+    Rc::new(Object::Error(format!("identifier not found: {}", id)))
+  }
+  fn eval_call_expression(&self, function: &ast::Expression, args: &[ast::Expression], environment: &Env) -> Rc<Object> {
+    let res = self.eval_expression(&function, environment);
+    if let Object::Error(_) = &*res {
+      return res.clone()
+    }
+    let mut call_args = Vec::new();
+    for arg in args {
+      let res = self.eval_expression(arg, environment);
+      if let Object::Error(_) = *res {
+        return res
+      }
+      call_args.push(res);
+    }
+    match &*res {
+      Object::Function{ params, body, env } => {
+        let mut func_env = Environment::new(Some(Rc::clone(&env)));
+        for (idx, param) in params.iter().enumerate() {
+          func_env.set(param.to_string(), call_args[idx].clone());
+        }
+        let func_res = self.eval_block_statements(&body.statements, &Rc::new(RefCell::new(func_env)));
+        if let Object::Return(val) = &*func_res {
+          return val.clone();
+        }
+        func_res
+      },
+      Object::BuiltIn(built_in) => {
+        (built_in)(call_args)
+      },
+      _ => {
+        Rc::new(Object::Error("Not a Function".to_string()))
+      }
+    }
+  }
+  fn eval_array_literal(&self, els: &[ast::Expression], environment: &Env) -> Rc<Object> {
+    let mut elements = Vec::new();
+    for el in els {
+      let res = self.eval_expression(el, environment);
+      if let Object::Error(_) = *res {
+        return res
+      }
+      elements.push(res);
+    }
+    Rc::new(Object::Array(elements))
+  }
+  fn eval_hash_literal(&self, hash: &ast::HashLiteral, environment: &Env) -> Rc<Object> {
+    let mut pairs = HashMap::new();
+    for pair in hash.pairs.iter() {
+      let key = self.eval_expression(&pair.0, environment);
+      let hash_key = match &*key {
+        Object::String(string) => {
+          HashKey::String(string.to_string())
+        }
+        Object::Integer(int) => {
+          HashKey::Integer(*int)
+        }
+        Object::Boolean(boolean) => {
+          HashKey::Boolean(*boolean)
+        }
+        _ => {
+          return Rc::new(Object::Error("Wrong type for hash key, must be string, integer or boolean".to_string()))
+        }
+      };
+      let value = self.eval_expression(&pair.1, environment);
+      if let Object::Error(_) = *value {
+        return value
+      }
+      pairs.insert(hash_key, value);
+    }
+    Rc::new(Object::Hash(pairs))
+  }
+  fn eval_if_expression(&self, condition: &ast::Expression, consequence: &ast::BlockStatement, alternative: &Option<ast::BlockStatement>, env: &Env) -> Rc<Object> {
+    let condition = self.eval_expression(&condition, env);
+    if let Object::Error(_) = *condition {
       return condition
     }
     if is_truthy(condition) {
-      self.eval_block_statements(consequence.statements, env)
+      self.eval_block_statements(&consequence.statements, env)
     } else {
       if let Some(block) = alternative {
-        return self.eval_block_statements(block.statements, env)
+        return self.eval_block_statements(&block.statements, env)
       }
-      ObjectType::Null
+      self.null.clone()
     }
   }
 
-  fn eval_statement(&self, node: ast::Statement, env: &Rc<RefCell<Environment>>) -> ObjectType {
+  fn eval_statement(&self, node: &ast::Statement, env: &Env) -> Rc<Object> {
     match node {
       ast::Statement::Expression(expr) => {
         self.eval_expression(expr, env)
       },
       ast::Statement::Return(value) => {
         let ret = self.eval_expression(value, env);
-        if let ObjectType::Error(_) = ret {
+        if let Object::Error(_) = *ret {
           return ret
         }
-        ObjectType::Return(Box::new(ret))
+        Rc::new(Object::Return(ret))
       },
       ast::Statement::Let{ identifier, value} => {
         let ret = self.eval_expression(value, env);
-        env.borrow_mut().set(identifier, &ret);
-        ObjectType::Null
+        env.borrow_mut().set(identifier.to_string(), ret);
+        self.null.clone()
       }
     }
   }
-  pub fn eval_block_statements(&self, stmts: Vec<ast::Statement>, env: &Rc<RefCell<Environment>>) -> ObjectType {
-    let mut result = ObjectType::Null;
+  pub fn eval_block_statements(&self, stmts: &[ast::Statement], env: &Env) -> Rc<Object> {
+    let mut result = self.null.clone();
     for stmt in stmts {
       result = self.eval_statement(stmt, env);
-      if let ObjectType::Return(_) | ObjectType::Error(_) = result {
+      if let Object::Return(_) | Object::Error(_) = *result {
           return result
       }
     }
@@ -482,121 +500,88 @@ impl Evaluator {
   }
 }
 
-fn eval_bang_operator(right: ObjectType) -> ObjectType {
-  let val = match right {
-    ObjectType::Boolean(b) => {
+fn eval_bang_operator(right: Rc<Object>) -> Object {
+  let val = match *right {
+    Object::Boolean(b) => {
       !b
     },
-    ObjectType::Null => true,
+    Object::Null => true,
     _ => false
   };
-  ObjectType::Boolean(val)
+  Object::Boolean(val)
 }
 
-fn eval_minus_operator(right: ObjectType) -> ObjectType {
-  if let ObjectType::Integer(i) = right {
-    return ObjectType::Integer(-i)
+fn eval_minus_operator(right: Rc<Object>) -> Object {
+  if let Object::Integer(i) = *right {
+    return Object::Integer(-i)
   }
-  ObjectType::Error(format!("unknown operator: -{}", right.object_type())) 
+  Object::Error(format!("unknown operator: -{}", right.object_type())) 
 }
 
-fn eval_prefix_expression(operator: &str, right: ObjectType) -> ObjectType {
-  match operator {
-    "!" => {
-      eval_bang_operator(right)  
-    }
-    "-" => {
-      eval_minus_operator(right)
-    }
-    _ => {
-      ObjectType::Error(format!("unknown operator: {}{}", operator, right.object_type())) 
-    }
-  }
-}
-
-fn eval_string_infix_expression(operator: &str, left: String, right: String) -> ObjectType {
+fn eval_string_infix_expression(operator: &str, left: String, right: String) -> Object {
   match operator {
     "+" => {
-      ObjectType::String(format!("{}{}", left, right))
+      Object::String(format!("{}{}", left, right))
     },
     _ => {
-       ObjectType::Error(format!("unknown operator: {} for strings.", operator)) 
+       Object::Error(format!("unknown operator: {} for strings.", operator)) 
     }
   }
 }
 
-fn eval_int_infix_expression(operator: &str, left: i64, right: i64) -> ObjectType {
+fn eval_int_infix_expression(operator: &str, left: i64, right: i64) -> Object {
   match operator {
     "+" => {
-      ObjectType::Integer(left + right)
+      Object::Integer(left + right)
     },
     "-" => {
-      ObjectType::Integer(left - right)
+      Object::Integer(left - right)
     },
     "*" => {
-      ObjectType::Integer(left * right)
+      Object::Integer(left * right)
     },
     "/" => {
-      ObjectType::Integer(left / right)
+      Object::Integer(left / right)
     },
     "<" => {
-      ObjectType::Boolean(left < right)
+      Object::Boolean(left < right)
     },
     ">" => {
-      ObjectType::Boolean(left > right)
+      Object::Boolean(left > right)
     },
     "==" => {
-      ObjectType::Boolean(left == right)
+      Object::Boolean(left == right)
     },
     "!=" => {
-      ObjectType::Boolean(left != right)
+      Object::Boolean(left != right)
     },
     _ => {
-       ObjectType::Error(format!("unknown operator: {} for integers.", operator)) 
+       Object::Error(format!("unknown operator: {} for integers.", operator)) 
     }
   }
 }
 
-fn eval_bool_infix_expression(operator: &str, left: bool, right: bool) -> ObjectType {
+fn eval_bool_infix_expression(operator: &str, left: bool, right: bool) -> Object {
   match operator {
     "==" => {
-      ObjectType::Boolean(left == right)
+      Object::Boolean(left == right)
     },
     "!=" => {
-      ObjectType::Boolean(left != right)
+      Object::Boolean(left != right)
     },
     _ => {
-      ObjectType::Error(format!("unknown operator: {} for booleans", operator)) 
+      Object::Error(format!("unknown operator: {} for booleans", operator)) 
     }
   }
 }
 
-fn eval_infix_expression(operator: &str, left: ObjectType, right: ObjectType) -> ObjectType {
-  let left_type = left.object_type();
-  let right_type = right.object_type();
-  match (left, right) {
-    (ObjectType::Integer(i1), ObjectType::Integer(i2)) => {
-      eval_int_infix_expression(operator, i1, i2)
-    },
-    (ObjectType::Boolean(b1), ObjectType::Boolean(b2)) => {
-      eval_bool_infix_expression(operator, b1, b2)
-    },
-    (ObjectType::String(s1), ObjectType::String(s2)) => {
-      eval_string_infix_expression(operator, s1, s2)
-    }
-    _ => {
-      ObjectType::Error(format!("type mismatch: {} {} {}", left_type, operator, right_type)) 
-    }
-  }
-}
-
-fn is_truthy(val: ObjectType) -> bool {
-  match val {
-    ObjectType::Null => {
+fn is_truthy(val: Rc<Object>) -> bool {
+  match &*val {
+    Object::Null => {
       false
     },
-    ObjectType::Boolean(b) => {
-      b
+    Object::Boolean(b) => {
+      *b
     }
     _=> {
       true
@@ -613,7 +598,7 @@ mod tests {
     let lexer = Lexer::new(&"5");
     let prog = ast::Parser::new(lexer).parse();
     let obj = Evaluator::new().eval_program(prog);
-    if let ObjectType::Integer(i) = obj {
+    if let Object::Integer(i) = *obj {
       assert_eq!(5, i);
     } else {
       assert_eq!(false, true)
@@ -624,7 +609,7 @@ mod tests {
     let lexer = Lexer::new(&"true");
     let prog = ast::Parser::new(lexer).parse();
     let obj = Evaluator::new().eval_program(prog);
-    if let ObjectType::Boolean(i) = obj {
+    if let Object::Boolean(i) = *obj {
       assert_eq!(true, i);
     } else {
       assert_eq!(false, true)
@@ -645,7 +630,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Boolean(i) = obj {
+      if let Object::Boolean(i) = *obj {
         assert_eq!(test.1, i);
       } else {
         assert_eq!(false, true)
@@ -665,7 +650,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Integer(i) = obj {
+      if let Object::Integer(i) = *obj {
         assert_eq!(test.1, i);
       } else {
         assert_eq!(false, true)
@@ -692,7 +677,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Integer(i) = obj {
+      if let Object::Integer(i) = *obj {
         assert_eq!(test.1, i);
       } else {
         assert_eq!(false, true)
@@ -716,7 +701,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Boolean(b) = obj {
+      if let Object::Boolean(b) = *obj {
         assert_eq!(test.1, b);
       } else {
         assert_eq!(false, true)
@@ -741,7 +726,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Boolean(b) = obj {
+      if let Object::Boolean(b) = *obj {
         assert_eq!(test.1, b);
       } else {
         assert_eq!(false, true)
@@ -762,7 +747,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Integer(i) = obj {
+      if let Object::Integer(i) = *obj {
         assert_eq!(test.1, i);
       } else {
         assert_eq!(false, true)
@@ -780,7 +765,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Null = obj {
+      if let Object::Null = *obj {
         assert_eq!(true, true);
       } else {
         assert_eq!(false, true)
@@ -807,7 +792,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Integer(i) = obj {
+      if let Object::Integer(i) = *obj {
         assert_eq!(i, test.1);
       } else {
         assert_eq!(false, true)
@@ -837,7 +822,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Error(err_str) = obj {
+      if let Object::Error(err_str) = &*obj {
         assert_eq!(err_str, test.1);
       } else {
         println!("{}", obj.inspect());
@@ -858,7 +843,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Integer(i) = obj {
+      if let Object::Integer(i) = *obj {
         assert_eq!(i, test.1);
       } else {
         println!("{}", obj.inspect());
@@ -881,7 +866,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Integer(i) = obj {
+      if let Object::Integer(i) = *obj {
         assert_eq!(i, test.1);
       } else {
         println!("{}", obj.inspect());
@@ -903,7 +888,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Integer(i) = obj {
+      if let Object::Integer(i) = *obj {
         assert_eq!(i, test.1);
       } else {
         println!("{}", obj.inspect());
@@ -922,7 +907,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::String(i) = obj {
+      if let Object::String(i) = &*obj {
         assert_eq!(i, test.1);
       } else {
         println!("{}", obj.inspect());
@@ -943,7 +928,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Integer(i) = obj {
+      if let Object::Integer(i) = *obj {
         assert_eq!(i, test.1);
       } else {
         println!("{}", obj.inspect());
@@ -961,7 +946,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Array(arr) = obj {
+      if let Object::Array(arr) = &*obj {
         for (i, num) in arr.iter().enumerate() {
           assert_eq!(num.inspect(), test.1[i]);
         }
@@ -987,7 +972,7 @@ mod tests {
       let lexer = Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Integer(i) = obj {
+      if let Object::Integer(i) = *obj {
         assert_eq!(i, test.1);
       } else {
         println!("{}", obj.inspect());
@@ -1005,7 +990,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Integer(i) = obj {
+      if let Object::Integer(i) = *obj {
         assert_eq!(i, test.1);
       } else {
         println!("{}", obj.inspect());
@@ -1023,7 +1008,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Integer(i) = obj {
+      if let Object::Integer(i) = *obj {
         assert_eq!(i, test.1);
       } else {
         println!("{}", obj.inspect());
@@ -1041,11 +1026,11 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
 
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Array(arr) = obj {
-        match (arr[0].clone(), arr[1].clone()) { 
-          (ObjectType::Integer(i1), ObjectType::Integer(i2)) => {
-            assert_eq!(i1, test.1[0]);
-            assert_eq!(i2, test.1[1]);
+      if let Object::Array(arr) = &*obj {
+        match (&*arr[0].clone(), &*arr[1].clone()) { 
+          (Object::Integer(i1), Object::Integer(i2)) => {
+            assert_eq!(*i1, test.1[0]);
+            assert_eq!(*i2, test.1[1]);
           },
           _=> {
             assert_eq!(false, true)
@@ -1066,11 +1051,11 @@ mod tests {
       let lexer = Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Array(arr) = obj {
-        match (arr[0].clone(), arr[1].clone()) { 
-          (ObjectType::Integer(i1), ObjectType::Integer(i2)) => {
-            assert_eq!(i1, test.1[0]);
-            assert_eq!(i2, test.1[1]);
+      if let Object::Array(arr) = &*obj {
+        match (&*arr[0].clone(), &*arr[1].clone()) { 
+          (Object::Integer(i1), Object::Integer(i2)) => {
+            assert_eq!(*i1, test.1[0]);
+            assert_eq!(*i2, test.1[1]);
           },
           _=> {
             assert_eq!(false, true)
@@ -1099,10 +1084,10 @@ mod tests {
     let lexer = Lexer::new(input);
     let prog = ast::Parser::new(lexer).parse();
     let obj = Evaluator::new().eval_program(prog);
-    if let ObjectType::Hash(hash) = obj {
+    if let Object::Hash(hash) = &*obj {
       for test in test_values {
         let value = hash.get(&HashKey::String(test.0.to_string())).unwrap();
-        if let ObjectType::Integer(i) = value {
+        if let Object::Integer(i) = &*value.clone() {
           assert_eq!(*i, test.1)
         }
       }
@@ -1128,10 +1113,10 @@ mod tests {
     let lexer = Lexer::new(input);
     let prog = ast::Parser::new(lexer).parse();
     let obj = Evaluator::new().eval_program(prog);
-    if let ObjectType::Hash(hash) = obj {
+    if let Object::Hash(hash) = &*obj {
       for test in test_values {
         let value = hash.get(&HashKey::Integer(test.0)).unwrap();
-        if let ObjectType::Integer(i) = value {
+        if let Object::Integer(i) = &*value.clone() {
           assert_eq!(*i, test.1)
         }
       }
@@ -1154,10 +1139,10 @@ mod tests {
     let lexer = Lexer::new(input);
     let prog = ast::Parser::new(lexer).parse();
     let obj = Evaluator::new().eval_program(prog);
-    if let ObjectType::Hash(hash) = obj {
+    if let Object::Hash(hash) = &*obj {
       for test in test_values {
         let value = hash.get(&HashKey::Boolean(test.0)).unwrap();
-        if let ObjectType::Integer(i) = value {
+        if let Object::Integer(i) = &*value.clone() {
           assert_eq!(*i, test.1)
         }
       }
@@ -1176,7 +1161,7 @@ mod tests {
       let lexer = Lexer::new(&test.0);
       let prog = ast::Parser::new(lexer).parse();
       let obj = Evaluator::new().eval_program(prog);
-      if let ObjectType::Integer(i) = obj {
+      if let Object::Integer(i) = *obj {
         assert_eq!(i, test.1);     
       } else {
         println!("{}", obj.inspect());

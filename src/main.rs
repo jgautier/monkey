@@ -1,7 +1,6 @@
 mod lexer;
 mod ast;
 mod eval;
-use eval::Object;
 use std::io;
 use std::io::Write;
 
