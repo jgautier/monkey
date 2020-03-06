@@ -1,9 +1,14 @@
+use jemallocator::Jemalloc;
+
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 mod lexer;
 mod ast;
 mod eval;
 use std::io;
 use std::io::Write;
-
+use std::time::{Instant};
 const PROMPT:&str = "🐒 >>> ";
 
 fn print_prompt() {
@@ -26,8 +31,9 @@ fn start() {
                             println!("{}", error);
                         }
                     } else {
+                        let now = Instant::now();
                         let result = evaluator.eval_program(program);
-                        println!("{}", result.inspect());
+                        println!("{} took {}ms", result.inspect(), now.elapsed().as_millis());
                     }
                 }
                 print_prompt();
