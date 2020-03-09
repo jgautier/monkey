@@ -1,0 +1,15 @@
+{
+  "name": "monkey",
+  "collaborators": [
+    "juliangautier"
+  ],
+  "version": "0.1.0",
+  "files": [
+    "monkey_bg.wasm",
+    "monkey.js",
+    "monkey.d.ts"
+  ],
+  "module": "monkey.js",
+  "types": "monkey.d.ts",
+  "sideEffects": false
+}
