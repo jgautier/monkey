@@ -155,6 +155,7 @@ pub struct Evaluator {
 }
 
 impl Evaluator {
+  #[allow(clippy::new_without_default)]
   pub fn new() -> Evaluator {
     let mut built_ins = HashMap::new();
     built_ins.insert("len".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
