@@ -11,24 +11,30 @@ pub struct Compiler {
   instructions: Instructions,
   constants: Vec<Object>
 }
+impl Default for Compiler {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 
 impl Compiler {
   pub fn new() -> Compiler {
     Compiler {
-      instructions: Instructions::new(),
+      instructions: Vec::new(),
       constants: Vec::new()
     }
   }
   pub fn compile(&mut self, program: &Program) {
     for statement in program.statements.iter() {
-      &self.compile_statement(statement);
+      self.compile_statement(statement);
     }
   }
   fn compile_statement(&mut self, statement: &Statement) {
     match statement {
       Statement::Expression(expr) => {
-        &self.compile_expression(expr);
-        &self.emit(Opcode::OpPop, vec![]);
+        self.compile_expression(expr);
+        self.emit(Opcode::OpPop, vec![]);
       },
       _ => panic!("unhandled statement type")
     };
@@ -38,37 +44,37 @@ impl Compiler {
     match expression {
       Expression::Infix{operator, left, right} => {
         let op = if operator == "<" {
-          &self.compile_expression(right);
-          &self.compile_expression(left);
+          self.compile_expression(right);
+          self.compile_expression(left);
           ">"
         } else {
-          &self.compile_expression(left);
-          &self.compile_expression(right);
+          self.compile_expression(left);
+          self.compile_expression(right);
           operator.as_str()
         };
 
         match op {
-          "+" => &self.emit(Opcode::OpAdd, vec![]),
-          "-" => &self.emit(Opcode::OpSub, vec![]),
-          "*" => &self.emit(Opcode::OpMul, vec![]),
-          "/" => &self.emit(Opcode::OpDiv, vec![]),
-          ">" => &self.emit(Opcode::OpGreaterThan, vec![]),
-          "==" => &self.emit(Opcode::OpEqual, vec![]),
-          "!=" => &self.emit(Opcode::OpNotEqual, vec![]),
+          "+" => self.emit(Opcode::OpAdd, vec![]),
+          "-" => self.emit(Opcode::OpSub, vec![]),
+          "*" => self.emit(Opcode::OpMul, vec![]),
+          "/" => self.emit(Opcode::OpDiv, vec![]),
+          ">" => self.emit(Opcode::OpGreaterThan, vec![]),
+          "==" => self.emit(Opcode::OpEqual, vec![]),
+          "!=" => self.emit(Opcode::OpNotEqual, vec![]),
           _ => panic!("invalid infix operator")
         };
       }
       Expression::Prefix{operator, right} => {
-        &self.compile_expression(right);
+        self.compile_expression(right);
         match operator.as_str() {
-          "-" => &self.emit(Opcode::OpMinus, vec![]),
-          "!" => &self.emit(Opcode::OpBang, vec![]),
+          "-" => self.emit(Opcode::OpMinus, vec![]),
+          "!" => self.emit(Opcode::OpBang, vec![]),
           _ => panic!("invalid prefix operator")
         };
       }
       Expression::IntegerLiteral(val) => {
         let constant = &self.add_constant(Object::Integer(*val));
-        &self.emit(Opcode::OpConstant, vec![*constant]);
+        self.emit(Opcode::OpConstant, vec![*constant]);
       }
       Expression::Boolean(val) => {
         if *val {
@@ -82,7 +88,7 @@ impl Compiler {
   }
 
   fn add_constant(&mut self, obj: Object) -> u32 {
-    &self.constants.push(obj);
+    self.constants.push(obj);
     let position: u32 = (&self.constants.len() - 1).try_into().unwrap();
     position
   }
@@ -94,7 +100,7 @@ impl Compiler {
 
   fn add_instruction(&mut self, instruction: &mut Vec<u8>) -> usize {
     let position = &self.instructions.len();
-    &self.instructions.append(instruction);
+    self.instructions.append(instruction);
     *position
   }
 
@@ -116,12 +122,6 @@ mod tests {
   use super::*;
   use crate::lexer;
   use crate::ast;
-  use crate::eval;
-  struct TestOp {
-    op: Opcode,
-    operands: Vec<u32>,
-    expected: Vec<u8>
-  }
   struct CompilerTestCase {
     input: String,
     expected_constants: Vec<u32>,

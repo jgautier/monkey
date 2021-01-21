@@ -18,7 +18,7 @@ pub struct VM {
 
 impl VM {
   pub fn new(bytecode: Bytecode) -> VM {
-    return VM {
+    VM {
       instructions: bytecode.instructions,
       constants: bytecode.constants,
       stack: Vec::with_capacity(STACK_SIZE),
@@ -61,7 +61,7 @@ impl VM {
           let operand = self.pop();
           match *operand {
             Object::Integer(val) => {
-              self.push(Object::Integer(val * -1))
+              self.push(Object::Integer(-val))
             }
             _ => {
               panic!("unsupported type for negation")
@@ -77,7 +77,6 @@ impl VM {
         Opcode::OpFalse => {
           self.push(FALSE);
         }
-        _ => panic!("unhandled op")
       }
     }
   }
@@ -147,7 +146,7 @@ impl VM {
   fn pop(&mut self) -> Rc<Object>{
     let frame = self.stack.get(self.sp - 1);
     self.sp -= 1;
-    return frame.unwrap().clone()
+    frame.unwrap().clone()
   }
 }
 

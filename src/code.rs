@@ -93,7 +93,7 @@ fn format_instruction(definition: &Definition, operands: Vec<u32>) -> String {
   }
 }
 
-pub fn make(op: Opcode, operands: &Vec<u32>) -> Instructions {
+pub fn make(op: Opcode, operands: &[u32]) -> Instructions {
   let def = op.definition();
   let mut instruction = Vec::new();
   instruction.push(op as u8);
@@ -109,7 +109,7 @@ pub fn make(op: Opcode, operands: &Vec<u32>) -> Instructions {
       }
     }
   }
-  return instruction
+  instruction
 }
 
 fn read_operands(def: &Definition, instructions: Instructions) -> (Vec<u32>, usize) {

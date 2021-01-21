@@ -31,7 +31,7 @@ pub enum Token<'a> {
     LBRACKET,
     RBRACKET,
     COLON,
-    
+
     // Keywords
     FUNCTION,
     LET,
@@ -214,7 +214,7 @@ impl<'a> Lexer<'a> {
         if chr == '"' {
             let i = self.input[self.cur_index +  1..].find(|c: char| c == '"').unwrap_or_else(|| self.input.len() - self.cur_index);
             let string = &self.input[self.cur_index + 1..=self.cur_index + i];
-            self.cur_index += i + 2;            
+            self.cur_index += i + 2;
             Some(Token::STRING(string))
         } else {
             None
@@ -224,7 +224,7 @@ impl<'a> Lexer<'a> {
 
 impl<'a> Iterator for Lexer<'a> {
     type Item = Token<'a>;
-    
+
     fn next(&mut self) -> Option<Token<'a>> {
         if self.check_done() {
             return None
@@ -237,7 +237,7 @@ impl<'a> Iterator for Lexer<'a> {
             .or_else(|| self.find_identifier())
             .or_else(|| self.find_numeric_literal())
             .or_else(|| self.find_string_literal())
-            .or_else(|| Some(Token::ILLEGAL))
+            .or(Some(Token::ILLEGAL))
     }
 }
 
@@ -247,14 +247,14 @@ mod tests {
     #[allow(clippy::cognitive_complexity)]
     #[test]
     fn test_next_token() {
-        static INPUT: &str = " 
+        static INPUT: &str = "
             let five = 5;
             let ten = 10;
             let add = fn(x, y) {
                 x + y;
             };
             let result = add(five, ten);
-            
+
             !-/*5;
             5 < 10 > 5;
 
@@ -364,7 +364,7 @@ mod tests {
         assert_eq!(Token::INT("2"), lexer.next().unwrap());
         assert_eq!(Token::RBRACKET, lexer.next().unwrap());
         assert_eq!(Token::SEMICOLON, lexer.next().unwrap());
-        
+
         assert_eq!(Token::LBRACKET, lexer.next().unwrap());
         assert_eq!(Token::INT("1"), lexer.next().unwrap());
         assert_eq!(Token::COMMA, lexer.next().unwrap());

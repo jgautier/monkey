@@ -33,7 +33,7 @@ fn start() {
                         let args: Vec<String> = env::args().collect();
                         let mut engine = "eval";
                         if args.len() > 1 {
-                            engine = args[1].split("=").collect::<Vec<&str>>()[1];
+                            engine = args[1].split('=').collect::<Vec<&str>>()[1];
                         }
                         if engine != "eval" && engine != "vm" {
                             panic!("Unsupported engine {}", engine);
