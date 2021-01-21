@@ -2,9 +2,14 @@ use wasm_bindgen::prelude::*;
 mod eval;
 mod ast;
 mod lexer;
+mod code;
+pub mod compiler;
+mod vm;
 pub use crate::eval::Evaluator;
 pub use crate::ast::Parser;
 pub use crate::lexer::Lexer;
+pub use crate::vm::VM;
+pub use crate::compiler::Compiler;
 
 #[wasm_bindgen]
 pub fn eval_program(prog: &str) -> String {

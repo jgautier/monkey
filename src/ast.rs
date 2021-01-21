@@ -232,7 +232,7 @@ impl<'a> Parser<'a> {
         self.next_token();
         if let lexer::Token::IDENT(_) = self.cur_token {
             let identifier = self.cur_token.clone().to_string();
-            
+
             if !self.expect_peek(lexer::Token::ASSIGN) {
                 return None;
             }
@@ -247,7 +247,7 @@ impl<'a> Parser<'a> {
         } else {
             None
         }
-      
+
     }
 
     fn parse_statement(&mut self) -> Option<Statement> {
@@ -284,9 +284,9 @@ impl<'a> Parser<'a> {
             if !self.peek_token_is_infix() {
                 return Some(left);
             }
-            self.next_token();            
+            self.next_token();
             left = self.parse_infix_expression(left)?;
-        } 
+        }
         Some(left)
     }
 
@@ -323,7 +323,7 @@ impl<'a> Parser<'a> {
         }
 
         let params = self.parse_fn_parameters();
-        
+
         if !self.expect_peek(lexer::Token::LBRACE) {
             return None;
         }
@@ -615,7 +615,7 @@ mod tests {
         check_parse_errors(parser);
         assert_eq!(program.statements.len(), 1);
         match &program.statements[0] {
-            Statement::Expression(_) => {      
+            Statement::Expression(_) => {
             },
             _ => panic!("wrong statement type")
         }
@@ -637,7 +637,7 @@ mod tests {
                     _ => {
                         panic!("wrong expression type")
                     }
-                }              
+                }
             },
             _ => panic!("wrong statement type")
         }
@@ -670,7 +670,7 @@ mod tests {
                     _ => {
                         panic!("wrong expression type")
                     }
-                }              
+                }
             },
             _ => panic!("wrong statement type")
         }
@@ -705,7 +705,7 @@ mod tests {
                                 },
                                 _ => {
                                     panic!("wrong expression type")
-                                }   
+                                }
                             }
                             match *right.as_ref() {
                                 Expression::IntegerLiteral(i) => {
@@ -713,13 +713,13 @@ mod tests {
                                 },
                                 _ => {
                                     panic!("wrong expression type")
-                                }   
+                                }
                             }
                         }
                         _ => {
                             panic!("wrong expression type")
                         }
-                    }              
+                    }
                 },
                 _ => panic!("wrong statement type")
             }
@@ -750,7 +750,7 @@ mod tests {
                                 },
                                 _ => {
                                     panic!("wrong expression type")
-                                }   
+                                }
                             }
                             match &*right.as_ref() {
                                 Expression::Boolean(i) => {
@@ -758,13 +758,13 @@ mod tests {
                                 },
                                 _ => {
                                     panic!("wrong expression type")
-                                }   
+                                }
                             }
                         }
                         _ => {
                             panic!("wrong expression type")
                         }
-                    }              
+                    }
                 },
                 _ => panic!("wrong statement type")
             }
@@ -789,12 +789,12 @@ mod tests {
                     match expr {
                         Expression::Index{ left, index } => {
                             assert_eq!(left.to_string(), expression.1);
-                            assert_eq!(index.to_string(), expression.2);                            
+                            assert_eq!(index.to_string(), expression.2);
                         }
                         _ => {
                             panic!("wrong expression type")
                         }
-                    }              
+                    }
                 },
                 _ => panic!("wrong statement type")
             }
@@ -847,7 +847,7 @@ mod tests {
             "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"
         ), (
             "true",
-            "true", 
+            "true",
         ), (
             "false",
             "false",

@@ -354,7 +354,7 @@ impl Evaluator {
         eval_string_infix_expression(operator, s1.to_string(), s2.to_string())
       }
       _ => {
-        Object::Error(format!("type mismatch: {} {} {}", left.object_type(), operator, right.object_type())) 
+        Object::Error(format!("type mismatch: {} {} {}", left.object_type(), operator, right.object_type()))
       }
     };
     Rc::new(ret)
@@ -366,13 +366,13 @@ impl Evaluator {
     }
     Rc::new(match operator {
       "!" => {
-        eval_bang_operator(right)  
+        eval_bang_operator(right)
       }
       "-" => {
         eval_minus_operator(right)
       }
       _ => {
-        Object::Error(format!("unknown operator: {}{}", operator, right.object_type())) 
+        Object::Error(format!("unknown operator: {}{}", operator, right.object_type()))
       }
     })
   }
@@ -516,7 +516,7 @@ fn eval_minus_operator(right: Rc<Object>) -> Object {
   if let Object::Integer(i) = *right {
     return Object::Integer(-i)
   }
-  Object::Error(format!("unknown operator: -{}", right.object_type())) 
+  Object::Error(format!("unknown operator: -{}", right.object_type()))
 }
 
 fn eval_string_infix_expression(operator: &str, left: String, right: String) -> Object {
@@ -525,7 +525,7 @@ fn eval_string_infix_expression(operator: &str, left: String, right: String) -> 
       Object::String(format!("{}{}", left, right))
     },
     _ => {
-       Object::Error(format!("unknown operator: {} for strings.", operator)) 
+       Object::Error(format!("unknown operator: {} for strings.", operator))
     }
   }
 }
@@ -557,7 +557,7 @@ fn eval_int_infix_expression(operator: &str, left: i64, right: i64) -> Object {
       Object::Boolean(left != right)
     },
     _ => {
-       Object::Error(format!("unknown operator: {} for integers.", operator)) 
+       Object::Error(format!("unknown operator: {} for integers.", operator))
     }
   }
 }
@@ -571,7 +571,7 @@ fn eval_bool_infix_expression(operator: &str, left: bool, right: bool) -> Object
       Object::Boolean(left != right)
     },
     _ => {
-      Object::Error(format!("unknown operator: {} for booleans", operator)) 
+      Object::Error(format!("unknown operator: {} for booleans", operator))
     }
   }
 }
@@ -736,7 +736,7 @@ mod tests {
   }
    #[test]
   fn test_if_expressions () {
-    let tests = vec![      
+    let tests = vec![
       ("if (true) { 10 }", 10),
       ("if (1) { 10 }", 10),
       ("if (1 < 2) { 10 }", 10),
@@ -757,7 +757,7 @@ mod tests {
   }
    #[test]
   fn test_if_no_else_expressions () {
-    let tests = vec![      
+    let tests = vec![
       "if (false) { 10 }",
       "if (1 > 2) { 10 }"
     ];
@@ -775,7 +775,7 @@ mod tests {
   }
   #[test]
   fn test_return_statements() {
-    let tests = vec![      
+    let tests = vec![
       ("return 10;", 10),
       ("return 10; 9;", 10),
       ("return 2 * 5; 9;", 10),
@@ -784,7 +784,7 @@ mod tests {
           if (10 > 1) {
             return 10;
           }
-          return 1; 
+          return 1;
         }
       ", 10)
     ];
@@ -802,7 +802,7 @@ mod tests {
   }
   #[test]
   fn test_error_statements() {
-    let tests = vec![      
+    let tests = vec![
       ("5 + true;", "type mismatch: INTEGER + BOOLEAN"),
       ("5 + true; 5;", "type mismatch: INTEGER + BOOLEAN"),
       ("-true", "unknown operator: -BOOLEAN"),
@@ -813,7 +813,7 @@ mod tests {
           if (10 > 1) {
             return true + false;
           }
-          return 1; 
+          return 1;
         }
       ", "unknown operator: + for booleans"),
       ("foobar", "identifier not found: foobar")
@@ -833,7 +833,7 @@ mod tests {
   }
   #[test]
   fn test_let_statements() {
-    let tests = vec![      
+    let tests = vec![
       ("let a = 5; a;", 5),
       ("let a = 5 * 5; a;", 25),
       ("let a = 5; let b = a; b;", 5),
@@ -854,7 +854,7 @@ mod tests {
   }
   #[test]
   fn test_funcs() {
-    let tests = vec![      
+    let tests = vec![
       ("let identity = fn(x) { x; }; identity(5);", 5),
       ("let identity = fn(x) { return x; }; identity(5);", 5),
       ("let double = fn(x) { x * 2; }; double(5);", 10),
@@ -877,7 +877,7 @@ mod tests {
   }
   #[test]
   fn test_closures() {
-    let tests = vec![      
+    let tests = vec![
       ("let newAdder = fn(x) {
           fn(y) { x + y };
         };
@@ -899,7 +899,7 @@ mod tests {
   }
   #[test]
   fn test_string() {
-    let tests = vec![      
+    let tests = vec![
       ("\"Hello World!\"", "Hello World!"),
       ("\"Hello\" + \" \" + \"World!\"", "Hello World!")
     ];
@@ -918,7 +918,7 @@ mod tests {
   }
   #[test]
   fn test_len() {
-    let tests = vec![      
+    let tests = vec![
       ("len(\"\")", 0),
       ("len(\"four\")", 4),
       ("len(\"fourfourfourfour\")", 16),
@@ -939,7 +939,7 @@ mod tests {
   }
   #[test]
   fn test_array_literal() {
-    let tests = vec![      
+    let tests = vec![
       ("[1, 2 * 2,3 + 3]", vec!["1", "4", "6"]),
     ];
     for test in tests {
@@ -959,7 +959,7 @@ mod tests {
   }
   #[test]
   fn test_array_index() {
-    let tests = vec![      
+    let tests = vec![
       ("[1, 2, 3][0]", 1),
       ("[1, 2, 3][1]", 2),
       ("[1, 2, 3][2]", 3),
@@ -983,7 +983,7 @@ mod tests {
   }
   #[test]
   fn test_first() {
-    let tests = vec![      
+    let tests = vec![
       ("first([1])", 1)
     ];
     for test in tests {
@@ -1001,7 +1001,7 @@ mod tests {
   }
   #[test]
   fn test_last() {
-    let tests = vec![      
+    let tests = vec![
       ("last([1, 2])", 2)
     ];
     for test in tests {
@@ -1019,7 +1019,7 @@ mod tests {
   }
   #[test]
   fn test_rest() {
-    let tests = vec![      
+    let tests = vec![
       ("rest([1, 2, 3])", vec![2, 3])
     ];
     for test in tests {
@@ -1028,7 +1028,7 @@ mod tests {
 
       let obj = Evaluator::new().eval_program(prog);
       if let Object::Array(arr) = &*obj {
-        match (&*arr[0].clone(), &*arr[1].clone()) { 
+        match (&*arr[0].clone(), &*arr[1].clone()) {
           (Object::Integer(i1), Object::Integer(i2)) => {
             assert_eq!(*i1, test.1[0]);
             assert_eq!(*i2, test.1[1]);
@@ -1045,7 +1045,7 @@ mod tests {
   }
   #[test]
   fn test_push() {
-    let tests = vec![      
+    let tests = vec![
       ("push([1], 2)", vec![1, 2])
     ];
     for test in tests {
@@ -1053,7 +1053,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
       let obj = Evaluator::new().eval_program(prog);
       if let Object::Array(arr) = &*obj {
-        match (&*arr[0].clone(), &*arr[1].clone()) { 
+        match (&*arr[0].clone(), &*arr[1].clone()) {
           (Object::Integer(i1), Object::Integer(i2)) => {
             assert_eq!(*i1, test.1[0]);
             assert_eq!(*i2, test.1[1]);
@@ -1154,7 +1154,7 @@ mod tests {
   }
   #[test]
   fn test_hash_index() {
-    let tests = vec![      
+    let tests = vec![
       ("{\"foo\": 5}[\"foo\"]", 5),
       ("let five = { \"five\": 5 }; five[\"five\"]", 5)
     ];
@@ -1163,7 +1163,7 @@ mod tests {
       let prog = ast::Parser::new(lexer).parse();
       let obj = Evaluator::new().eval_program(prog);
       if let Object::Integer(i) = *obj {
-        assert_eq!(i, test.1);     
+        assert_eq!(i, test.1);
       } else {
         println!("{}", obj.inspect());
         assert_eq!(false, true)

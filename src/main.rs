@@ -8,6 +8,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 use std::io;
 use std::io::Write;
 use std::time::{Instant};
+use std::env;
 const PROMPT:&str = "🐒 >>> ";
 
 fn print_prompt() {
@@ -29,8 +30,24 @@ fn start() {
                             println!("{}", error);
                         }
                     } else {
+                        let args: Vec<String> = env::args().collect();
+                        let mut engine = "eval";
+                        if args.len() > 1 {
+                            engine = args[1].split("=").collect::<Vec<&str>>()[1];
+                        }
+                        if engine != "eval" && engine != "vm" {
+                            panic!("Unsupported engine {}", engine);
+                        }
                         let now = Instant::now();
-                        let result = evaluator.eval_program(program);
+                        let result = if engine == "eval" {
+                            evaluator.eval_program(program)
+                        } else {
+                            let mut compiler = monkey::compiler::Compiler::new();
+                            compiler.compile(&program);
+                            let mut vm = monkey::VM::new(compiler.bytecode());
+                            vm.run();
+                            vm.last_popped_stack_elem()
+                        };
                         println!("{} took {}ms", result.inspect(), now.elapsed().as_millis());
                     }
                 }
