@@ -14,7 +14,10 @@ pub enum Opcode {
   OpNotEqual,
   OpGreaterThan,
   OpMinus,
-  OpBang
+  OpBang,
+  OpJumpNotTruthy,
+  OpJump,
+  OpNull
 }
 
 #[derive(Debug)]
@@ -38,7 +41,10 @@ impl Opcode {
       Opcode::OpNotEqual => Definition {name: "OpNotEqual".to_string(), operand_widths: vec![]},
       Opcode::OpGreaterThan => Definition {name: "OpGreaterThan".to_string(), operand_widths: vec![]},
       Opcode::OpMinus => Definition {name: "OpMinus".to_string(), operand_widths: vec![]},
-      Opcode::OpBang => Definition {name: "OpBang".to_string(), operand_widths: vec![]}
+      Opcode::OpBang => Definition {name: "OpBang".to_string(), operand_widths: vec![]},
+      Opcode::OpJumpNotTruthy => Definition {name: "OpJumpNotTruthy".to_string(), operand_widths: vec![2]},
+      Opcode::OpJump => Definition {name: "OpJump".to_string(), operand_widths: vec![2]},
+      Opcode::OpNull => Definition {name: "OpNull".to_string(), operand_widths: vec![]},
     }
   }
   pub fn lookup(op: u8) -> Opcode {
@@ -56,6 +62,9 @@ impl Opcode {
       10 => Opcode::OpGreaterThan,
       11 => Opcode::OpMinus,
       12 => Opcode::OpBang,
+      13 => Opcode::OpJumpNotTruthy,
+      14 => Opcode::OpJump,
+      15 => Opcode::OpNull,
       _ => panic!("unknown op code")
     }
   }
@@ -63,7 +72,7 @@ impl Opcode {
 
 pub type Instructions = Vec<u8>;
 
-trait InstructionsExt {
+pub trait InstructionsExt {
   fn string(&self) -> String;
 }
 

@@ -8,6 +8,7 @@ use std::rc::Rc;
 const STACK_SIZE:usize = 2048;
 const TRUE:Object = Object::Boolean(true);
 const FALSE:Object = Object::Boolean(false);
+const NULL:Object = Object::Null;
 
 pub struct VM {
   constants: Vec<Object>,
@@ -35,10 +36,25 @@ impl VM {
       let op = Opcode::lookup(self.instructions[ip]);
       ip += 1;
       match op {
+        Opcode::OpNull => {
+          self.push(NULL);
+        }
         Opcode::OpConstant => {
           let const_index = u16::from_be_bytes(self.instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
           self.push(self.constants[const_index].clone());
           ip += 2;
+        }
+        Opcode::OpJumpNotTruthy  => {
+          let pos = u16::from_be_bytes(self.instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
+          ip += 2;
+          let condition = self.pop();
+          if !self.is_truthy(condition) {
+            ip = pos;
+          }
+        }
+        Opcode::OpJump => {
+          let pos = u16::from_be_bytes(self.instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
+          ip = pos;
         }
         Opcode::OpAdd | Opcode::OpSub | Opcode::OpDiv | Opcode::OpMul => {
           self.execute_binary_operation(op)
@@ -51,6 +67,9 @@ impl VM {
           match *operand {
             Object::Boolean(val) => {
               self.push(self.boolean_to_const(!val))
+            }
+            Object::Null => {
+              self.push(self.boolean_to_const(true))
             }
             _ => {
               self.push(self.boolean_to_const(false))
@@ -78,6 +97,13 @@ impl VM {
           self.push(FALSE);
         }
       }
+    }
+  }
+  fn is_truthy(&self, obj: Rc<Object>) -> bool {
+    match *obj {
+      Object::Boolean(val) => val,
+      Object::Null => false,
+      _ => true
     }
   }
   fn boolean_to_const(&self, val: bool) -> Object {
@@ -332,6 +358,50 @@ mod tests {
       VMTestCase {
         input: "!!5".to_string(),
         expected: Object::Boolean(true)
+      },
+      VMTestCase {
+        input: "if (true) { 10 }".to_string(),
+        expected: Object::Integer(10)
+      },
+      VMTestCase {
+        input: "if (true) { 10 } else { 20 }".to_string(),
+        expected: Object::Integer(10)
+      },
+      VMTestCase {
+        input: "if (false) { 10 } else { 20 }".to_string(),
+        expected: Object::Integer(20)
+      },
+      VMTestCase {
+        input: "if (1) { 10 }".to_string(),
+        expected: Object::Integer(10)
+      },
+      VMTestCase {
+        input: "if (1 < 2) { 10 }".to_string(),
+        expected: Object::Integer(10)
+      },
+      VMTestCase {
+        input: "if (1 < 2) { 10 } else { 20 }".to_string(),
+        expected: Object::Integer(10)
+      },
+      VMTestCase {
+        input: "if (1 > 2) { 10 } else { 20 }".to_string(),
+        expected: Object::Integer(20)
+      },
+      VMTestCase {
+        input: "if (1 > 2) { 10 }".to_string(),
+        expected: NULL
+      },
+      VMTestCase {
+        input: "if (false) { 10 }".to_string(),
+        expected: NULL
+      },
+      VMTestCase {
+        input: "!(if (false) { 5; })".to_string(),
+        expected: Object::Boolean(true)
+      },
+      VMTestCase {
+        input: "if ((if (false) { 10 })) { 10 } else { 20 }".to_string(),
+        expected: Object::Integer(20)
       }
     ];
     for test in tests {
@@ -347,6 +417,9 @@ mod tests {
         }
         (Object::Boolean(val1), Object::Boolean(val2)) => {
           assert_eq!(val1, *val2, "{:?}", test.input);
+        }
+        (Object::Null, Object::Null) => {
+          assert_eq!(true, true)
         }
         _ => panic!("unhandled object type")
       }

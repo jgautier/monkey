@@ -4,12 +4,21 @@ use crate::code;
 use crate::eval::Object;
 use crate::ast::Program;
 use crate::ast::Statement;
+use crate::ast::BlockStatement;
 use crate::ast::Expression;
 use std::convert::TryInto;
 
+#[derive(Clone)]
+struct EmittedInstruction {
+  opcode: Opcode,
+  position: u32
+}
+
 pub struct Compiler {
   instructions: Instructions,
-  constants: Vec<Object>
+  constants: Vec<Object>,
+  last_instruction: Option<EmittedInstruction>,
+  previous_instruction: Option<EmittedInstruction>
 }
 impl Default for Compiler {
   fn default() -> Self {
@@ -17,12 +26,13 @@ impl Default for Compiler {
   }
 }
 
-
 impl Compiler {
   pub fn new() -> Compiler {
     Compiler {
       instructions: Vec::new(),
-      constants: Vec::new()
+      constants: Vec::new(),
+      last_instruction: None,
+      previous_instruction: None
     }
   }
   pub fn compile(&mut self, program: &Program) {
@@ -39,9 +49,39 @@ impl Compiler {
       _ => panic!("unhandled statement type")
     };
   }
-
+  fn compile_blockstatement(&mut self, block_statement: &BlockStatement) {
+    for s in &block_statement.statements {
+      self.compile_statement(s);
+    }
+  }
   fn compile_expression(&mut self, expression: &Expression) {
     match expression {
+      Expression::If{condition, consequence, alternative} => {
+        self.compile_expression(condition);
+        // emit op with bogus value and will update later
+        let jump_not_truthy_pos = self.emit(Opcode::OpJumpNotTruthy, vec![9999]);
+        self.compile_blockstatement(consequence);
+        if let Some(instruction) = &self.last_instruction {
+          if let Opcode::OpPop = instruction.opcode {
+            self.instructions.pop();
+            self.last_instruction = self.previous_instruction.clone();
+          }
+        }
+        let jump_pos = self.emit(Opcode::OpJump, vec![9999]);
+        self.change_operand(jump_not_truthy_pos, self.instructions.len() as u32);
+        if let Some(alt) = alternative {
+          self.compile_blockstatement(alt);
+        } else {
+          self.emit(Opcode::OpNull, vec![]);
+        }
+        if let Some(instruction) = &self.last_instruction {
+          if let Opcode::OpPop = instruction.opcode {
+            self.instructions.pop();
+            self.last_instruction = self.previous_instruction.clone();
+          }
+          self.change_operand(jump_pos, self.instructions.len() as u32)
+        }
+      }
       Expression::Infix{operator, left, right} => {
         let op = if operator == "<" {
           self.compile_expression(right);
@@ -78,13 +118,25 @@ impl Compiler {
       }
       Expression::Boolean(val) => {
         if *val {
-          self.emit(Opcode::OpTrue, vec![])
+          self.emit(Opcode::OpTrue, vec![]);
         } else {
-          self.emit(Opcode::OpFalse, vec![])
+          self.emit(Opcode::OpFalse, vec![]);
         }
       }
       _ => panic!("unhandled expression")
     };
+  }
+
+  fn replace_instruction(&mut self, position: usize, new_instruction: Vec<u8>) {
+    for (i, byte) in new_instruction.iter().enumerate() {
+      self.instructions[i + position] = *byte
+    }
+  }
+
+  fn change_operand(&mut self, position: usize, operand: u32) {
+    let op_code = Opcode::lookup(self.instructions[position]);
+    let new_instruction = code::make(op_code, &[operand]);
+    self.replace_instruction(position, new_instruction);
   }
 
   fn add_constant(&mut self, obj: Object) -> u32 {
@@ -93,9 +145,17 @@ impl Compiler {
     position
   }
 
-  fn emit(&mut self, op: Opcode, operands: Vec<u32>) {
+  fn emit(&mut self, op: Opcode, operands: Vec<u32>) -> usize {
     let mut instruction = code::make(op, &operands);
-    self.add_instruction(&mut instruction);
+    let pos = self.add_instruction(&mut instruction);
+    let previous = self.last_instruction.clone();
+    let last = EmittedInstruction{
+      opcode: op,
+      position: pos as u32
+    };
+    self.previous_instruction = previous;
+    self.last_instruction = Some(last);
+    pos
   }
 
   fn add_instruction(&mut self, instruction: &mut Vec<u8>) -> usize {
@@ -122,6 +182,7 @@ mod tests {
   use super::*;
   use crate::lexer;
   use crate::ast;
+  use crate::code::InstructionsExt;
   struct CompilerTestCase {
     input: String,
     expected_constants: Vec<u32>,
@@ -273,6 +334,34 @@ mod tests {
           code::make(Opcode::OpBang, &vec![]),
           code::make(Opcode::OpPop, &vec![])
         ]
+      },
+      CompilerTestCase {
+        input: "if (true) { 10 }; 3333;".to_string(),
+        expected_constants: vec![10, 3333],
+        expected_instructions: vec![
+          code::make(Opcode::OpTrue, &vec![]),
+          code::make(Opcode::OpJumpNotTruthy, &vec![10]),
+          code::make(Opcode::OpConstant, &vec![0]),
+          code::make(Opcode::OpJump, &vec![11]),
+          code::make(Opcode::OpNull, &vec![]),
+          code::make(Opcode::OpPop, &vec![]),
+          code::make(Opcode::OpConstant, &vec![1]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "if (true) { 10 } else { 20 }; 3333;".to_string(),
+        expected_constants: vec![10, 20, 3333],
+        expected_instructions: vec![
+          code::make(Opcode::OpTrue, &vec![]),
+          code::make(Opcode::OpJumpNotTruthy, &vec![10]),
+          code::make(Opcode::OpConstant, &vec![0]),
+          code::make(Opcode::OpJump, &vec![13]),
+          code::make(Opcode::OpConstant, &vec![1]),
+          code::make(Opcode::OpPop, &vec![]),
+          code::make(Opcode::OpConstant, &vec![2]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
       }
     ];
     run_tests(test)
@@ -288,6 +377,7 @@ mod tests {
       let mut compiler = Compiler::new();
       compiler.compile(&program);
       let bytecode = compiler.bytecode();
+      assert_eq!(bytecode.instructions.string(), test.expected_instructions.clone().into_iter().flatten().collect::<Instructions>().string());
       for (i, expected_instruction) in test.expected_instructions.iter().flatten().enumerate() {
         assert_eq!(bytecode.instructions[i], *expected_instruction);
       }
