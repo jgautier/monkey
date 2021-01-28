@@ -1,5 +1,5 @@
 use wasm_bindgen::prelude::*;
-mod eval;
+pub mod eval;
 mod ast;
 mod lexer;
 mod code;

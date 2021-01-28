@@ -6,12 +6,14 @@ use std::convert::TryInto;
 use std::rc::Rc;
 
 const STACK_SIZE:usize = 2048;
+const GLOBALS_SIZE:usize = 65536;
 const TRUE:Object = Object::Boolean(true);
 const FALSE:Object = Object::Boolean(false);
 const NULL:Object = Object::Null;
 
 pub struct VM {
   constants: Vec<Object>,
+  pub globals: Vec<Rc<Object>>,
   instructions: Instructions,
   stack: Vec<Rc<Object>>,
   sp: usize
@@ -22,6 +24,16 @@ impl VM {
     VM {
       instructions: bytecode.instructions,
       constants: bytecode.constants,
+      globals: Vec::with_capacity(GLOBALS_SIZE),
+      stack: Vec::with_capacity(STACK_SIZE),
+      sp: 0
+    }
+  }
+  pub fn new_with_global_store(bytecode: Bytecode, globals: Vec<Rc<Object>>) -> VM {
+    VM {
+      instructions: bytecode.instructions,
+      constants: bytecode.constants,
+      globals,
       stack: Vec::with_capacity(STACK_SIZE),
       sp: 0
     }
@@ -36,6 +48,22 @@ impl VM {
       let op = Opcode::lookup(self.instructions[ip]);
       ip += 1;
       match op {
+        Opcode::OpSetGlobal => {
+          let global_index = u16::from_be_bytes(self.instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
+          ip += 2;
+          let len = self.globals.len();
+          let global = self.pop();
+          if len <= global_index {
+            self.globals.push(global);
+          } else {
+            self.globals[global_index] = global;
+          }
+        }
+        Opcode::OpGetGlobal => {
+          let global_index = u16::from_be_bytes(self.instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
+          ip += 2;
+          self.push((*self.globals[global_index]).clone())
+        }
         Opcode::OpNull => {
           self.push(NULL);
         }
@@ -402,7 +430,20 @@ mod tests {
       VMTestCase {
         input: "if ((if (false) { 10 })) { 10 } else { 20 }".to_string(),
         expected: Object::Integer(20)
+      },
+      VMTestCase {
+        input: "let one = 1; one".to_string(),
+        expected: Object::Integer(1)
+      },
+      VMTestCase {
+        input: "let one = 1; let two = 2; one + two".to_string(),
+        expected: Object::Integer(3)
+      },
+      VMTestCase {
+        input: "let one = 1; let two = one + one; one + two".to_string(),
+        expected: Object::Integer(3)
       }
+
     ];
     for test in tests {
       let program = parse(&test.input);

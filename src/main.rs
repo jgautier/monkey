@@ -9,6 +9,8 @@ use std::io;
 use std::io::Write;
 use std::time::{Instant};
 use std::env;
+use std::collections::HashMap;
+use std::rc::Rc;
 const PROMPT:&str = "🐒 >>> ";
 
 fn print_prompt() {
@@ -17,6 +19,9 @@ fn print_prompt() {
 }
 fn start() {
     let evaluator = &monkey::Evaluator::new();
+    let mut constants:Vec<monkey::eval::Object> = Vec::new();
+    let mut symbols:monkey::compiler::SymbolTable = HashMap::new();
+    let mut globals:Vec<Rc<monkey::eval::Object>> = Vec::new();
     loop {
         let mut input = String::new();
         match io::stdin().read_line(&mut input) {
@@ -42,11 +47,15 @@ fn start() {
                         let result = if engine == "eval" {
                             evaluator.eval_program(program)
                         } else {
-                            let mut compiler = monkey::compiler::Compiler::new();
+                            let mut compiler = monkey::compiler::Compiler::new_with_state(symbols, constants);
                             compiler.compile(&program);
-                            let mut vm = monkey::VM::new(compiler.bytecode());
+                            let mut vm = monkey::VM::new_with_global_store(compiler.bytecode(), globals);
                             vm.run();
-                            vm.last_popped_stack_elem()
+                            let last_elem = vm.last_popped_stack_elem();
+                            constants = compiler.constants;
+                            symbols = compiler.symbol_table;
+                            globals = vm.globals;
+                            last_elem
                         };
                         println!("{} took {}ms", result.inspect(), now.elapsed().as_millis());
                     }

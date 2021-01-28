@@ -6,6 +6,7 @@ use crate::ast::Program;
 use crate::ast::Statement;
 use crate::ast::BlockStatement;
 use crate::ast::Expression;
+use std::collections::HashMap;
 use std::convert::TryInto;
 
 #[derive(Clone)]
@@ -14,9 +15,36 @@ struct EmittedInstruction {
   position: u32
 }
 
+pub enum SymbolScope {
+  Global
+}
+
+pub struct Symbol {
+  index: usize
+}
+
+pub type SymbolTable = HashMap<String, Symbol>;
+
+trait SymbolTableExt {
+  fn define(&mut self, name: &str) -> &Symbol;
+  fn resolve(&mut self, name: &str) -> Option<&Symbol>;
+}
+
+impl SymbolTableExt for SymbolTable {
+  fn define(&mut self, name: &str) -> &Symbol {
+    let symbol = Symbol{index: self.len()};
+    self.insert(name.to_string(), symbol);
+    self.get(name).unwrap()
+  }
+  fn resolve(&mut self, name: &str) -> Option<&Symbol> {
+    self.get(name)
+  }
+}
+
 pub struct Compiler {
   instructions: Instructions,
-  constants: Vec<Object>,
+  pub constants: Vec<Object>,
+  pub symbol_table: SymbolTable,
   last_instruction: Option<EmittedInstruction>,
   previous_instruction: Option<EmittedInstruction>
 }
@@ -31,6 +59,16 @@ impl Compiler {
     Compiler {
       instructions: Vec::new(),
       constants: Vec::new(),
+      symbol_table: SymbolTable::new(),
+      last_instruction: None,
+      previous_instruction: None
+    }
+  }
+  pub fn new_with_state(symbol_table: SymbolTable, constants: Vec<Object>) -> Compiler {
+    Compiler {
+      instructions: Vec::new(),
+      constants,
+      symbol_table,
       last_instruction: None,
       previous_instruction: None
     }
@@ -46,6 +84,11 @@ impl Compiler {
         self.compile_expression(expr);
         self.emit(Opcode::OpPop, vec![]);
       },
+      Statement::Let{identifier, value} => {
+        self.compile_expression(value);
+        let index = self.symbol_table.define(identifier).index;
+        self.emit(Opcode::OpSetGlobal, vec![index as u32]);
+      }
       _ => panic!("unhandled statement type")
     };
   }
@@ -122,6 +165,14 @@ impl Compiler {
         } else {
           self.emit(Opcode::OpFalse, vec![]);
         }
+      }
+      Expression::Identifier(id) => {
+        let index = if let Some(sym) = self.symbol_table.get(id) {
+          sym.index
+        } else {
+          panic!("undefined variable {}", id);
+        };
+        self.emit(Opcode::OpGetGlobal, vec![index as u32]);
       }
       _ => panic!("unhandled expression")
     };
@@ -362,7 +413,49 @@ mod tests {
           code::make(Opcode::OpConstant, &vec![2]),
           code::make(Opcode::OpPop, &vec![])
         ]
-      }
+      },
+      CompilerTestCase {
+        input: "
+          let one = 1;
+          let two = 2;
+        ".to_string(),
+        expected_constants: vec![1, 2],
+        expected_instructions: vec![
+          code::make(Opcode::OpConstant, &vec![0]),
+          code::make(Opcode::OpSetGlobal, &vec![0]),
+          code::make(Opcode::OpConstant, &vec![1]),
+          code::make(Opcode::OpSetGlobal, &vec![1])
+        ]
+      },
+      CompilerTestCase {
+        input: "
+          let one = 1;
+          one;
+          ".to_string(),
+        expected_constants: vec![1],
+        expected_instructions: vec![
+          code::make(Opcode::OpConstant, &vec![0]),
+          code::make(Opcode::OpSetGlobal, &vec![0]),
+          code::make(Opcode::OpGetGlobal, &vec![0]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "
+          let one = 1;
+          let two = one;
+          two;
+          ".to_string(),
+        expected_constants: vec![1],
+        expected_instructions: vec![
+          code::make(Opcode::OpConstant, &vec![0]),
+          code::make(Opcode::OpSetGlobal, &vec![0]),
+          code::make(Opcode::OpGetGlobal, &vec![0]),
+          code::make(Opcode::OpSetGlobal, &vec![1]),
+          code::make(Opcode::OpGetGlobal, &vec![1]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      },
     ];
     run_tests(test)
   }
