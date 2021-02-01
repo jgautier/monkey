@@ -159,6 +159,10 @@ impl Compiler {
         let constant = &self.add_constant(Object::Integer(*val));
         self.emit(Opcode::OpConstant, vec![*constant]);
       }
+      Expression::StringLiteral(val) => {
+        let constant = &self.add_constant(Object::String(val.to_string()));
+        self.emit(Opcode::OpConstant, vec![*constant]);
+      }
       Expression::Boolean(val) => {
         if *val {
           self.emit(Opcode::OpTrue, vec![]);
@@ -236,7 +240,7 @@ mod tests {
   use crate::code::InstructionsExt;
   struct CompilerTestCase {
     input: String,
-    expected_constants: Vec<u32>,
+    expected_constants: Vec<Object>,
     expected_instructions: Vec<Instructions>
   }
   #[test]
@@ -244,7 +248,7 @@ mod tests {
     let test = vec![
       CompilerTestCase {
         input: "1 + 2".to_string(),
-        expected_constants: vec![1, 2],
+        expected_constants: vec![Object::Integer(1), Object::Integer(2)],
         expected_instructions: vec![
           code::make(Opcode::OpConstant, &vec![0]),
           code::make(Opcode::OpConstant, &vec![1]),
@@ -254,7 +258,7 @@ mod tests {
       },
       CompilerTestCase {
         input: "1; 2".to_string(),
-        expected_constants: vec![1, 2],
+        expected_constants: vec![Object::Integer(1), Object::Integer(2)],
         expected_instructions: vec![
           code::make(Opcode::OpConstant, &vec![0]),
           code::make(Opcode::OpPop, &vec![]),
@@ -264,7 +268,7 @@ mod tests {
       },
       CompilerTestCase {
         input: "1 - 2".to_string(),
-        expected_constants: vec![1, 2],
+        expected_constants: vec![Object::Integer(1), Object::Integer(2)],
         expected_instructions: vec![
           code::make(Opcode::OpConstant, &vec![0]),
           code::make(Opcode::OpConstant, &vec![1]),
@@ -274,7 +278,7 @@ mod tests {
       },
       CompilerTestCase {
         input: "1 * 2".to_string(),
-        expected_constants: vec![1, 2],
+        expected_constants: vec![Object::Integer(1), Object::Integer(2)],
         expected_instructions: vec![
           code::make(Opcode::OpConstant, &vec![0]),
           code::make(Opcode::OpConstant, &vec![1]),
@@ -284,7 +288,7 @@ mod tests {
       },
       CompilerTestCase {
         input: "2 / 1".to_string(),
-        expected_constants: vec![2, 1],
+        expected_constants: vec![Object::Integer(2), Object::Integer(1)],
         expected_instructions: vec![
           code::make(Opcode::OpConstant, &vec![0]),
           code::make(Opcode::OpConstant, &vec![1]),
@@ -310,7 +314,7 @@ mod tests {
       },
       CompilerTestCase {
         input: "1 > 2".to_string(),
-        expected_constants: vec![1, 2],
+        expected_constants: vec![Object::Integer(1), Object::Integer(2)],
         expected_instructions: vec![
           code::make(Opcode::OpConstant, &vec![0]),
           code::make(Opcode::OpConstant, &vec![1]),
@@ -320,7 +324,7 @@ mod tests {
       },
       CompilerTestCase {
         input: "1 < 2".to_string(),
-        expected_constants: vec![2, 1],
+        expected_constants: vec![Object::Integer(2), Object::Integer(1)],
         expected_instructions: vec![
           code::make(Opcode::OpConstant, &vec![0]),
           code::make(Opcode::OpConstant, &vec![1]),
@@ -330,7 +334,7 @@ mod tests {
       },
       CompilerTestCase {
         input: "1 == 2".to_string(),
-        expected_constants: vec![1, 2],
+        expected_constants: vec![Object::Integer(1), Object::Integer(2)],
         expected_instructions: vec![
           code::make(Opcode::OpConstant, &vec![0]),
           code::make(Opcode::OpConstant, &vec![1]),
@@ -340,7 +344,7 @@ mod tests {
       },
       CompilerTestCase {
         input: "1 != 2".to_string(),
-        expected_constants: vec![1, 2],
+        expected_constants: vec![Object::Integer(1), Object::Integer(2)],
         expected_instructions: vec![
           code::make(Opcode::OpConstant, &vec![0]),
           code::make(Opcode::OpConstant, &vec![1]),
@@ -370,7 +374,7 @@ mod tests {
       },
       CompilerTestCase {
         input: "-1".to_string(),
-        expected_constants: vec![1],
+        expected_constants: vec![Object::Integer(1)],
         expected_instructions: vec![
           code::make(Opcode::OpConstant, &vec![0]),
           code::make(Opcode::OpMinus, &vec![]),
@@ -388,7 +392,7 @@ mod tests {
       },
       CompilerTestCase {
         input: "if (true) { 10 }; 3333;".to_string(),
-        expected_constants: vec![10, 3333],
+        expected_constants: vec![Object::Integer(10), Object::Integer(3333)],
         expected_instructions: vec![
           code::make(Opcode::OpTrue, &vec![]),
           code::make(Opcode::OpJumpNotTruthy, &vec![10]),
@@ -402,7 +406,7 @@ mod tests {
       },
       CompilerTestCase {
         input: "if (true) { 10 } else { 20 }; 3333;".to_string(),
-        expected_constants: vec![10, 20, 3333],
+        expected_constants: vec![Object::Integer(10), Object::Integer(20), Object::Integer(3333)],
         expected_instructions: vec![
           code::make(Opcode::OpTrue, &vec![]),
           code::make(Opcode::OpJumpNotTruthy, &vec![10]),
@@ -419,7 +423,7 @@ mod tests {
           let one = 1;
           let two = 2;
         ".to_string(),
-        expected_constants: vec![1, 2],
+        expected_constants: vec![Object::Integer(1), Object::Integer(2)],
         expected_instructions: vec![
           code::make(Opcode::OpConstant, &vec![0]),
           code::make(Opcode::OpSetGlobal, &vec![0]),
@@ -432,7 +436,7 @@ mod tests {
           let one = 1;
           one;
           ".to_string(),
-        expected_constants: vec![1],
+        expected_constants: vec![Object::Integer(1)],
         expected_instructions: vec![
           code::make(Opcode::OpConstant, &vec![0]),
           code::make(Opcode::OpSetGlobal, &vec![0]),
@@ -446,7 +450,7 @@ mod tests {
           let two = one;
           two;
           ".to_string(),
-        expected_constants: vec![1],
+        expected_constants: vec![Object::Integer(1)],
         expected_instructions: vec![
           code::make(Opcode::OpConstant, &vec![0]),
           code::make(Opcode::OpSetGlobal, &vec![0]),
@@ -456,6 +460,24 @@ mod tests {
           code::make(Opcode::OpPop, &vec![])
         ]
       },
+      CompilerTestCase{
+        input: "\"monkey\"".to_string(),
+        expected_constants: vec![Object::String("monkey".to_string())],
+        expected_instructions: vec![
+          code::make(Opcode::OpConstant, &vec![0]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase{
+        input: "\"mon\" + \"key\"".to_string(),
+        expected_constants: vec![Object::String("mon".to_string()), Object::String("key".to_string())],
+        expected_instructions: vec![
+          code::make(Opcode::OpConstant, &vec![0]),
+          code::make(Opcode::OpConstant, &vec![1]),
+          code::make(Opcode::OpAdd, &vec![]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      }
     ];
     run_tests(test)
   }
@@ -475,8 +497,9 @@ mod tests {
         assert_eq!(bytecode.instructions[i], *expected_instruction);
       }
       for (i, constant) in test.expected_constants.iter().enumerate() {
-        match bytecode.constants[i] {
-          Object::Integer(val) => assert_eq!(val, (*constant) as i64),
+        match (&bytecode.constants[i], constant) {
+          (Object::Integer(val), Object::Integer(val2)) => assert_eq!(val, val2),
+          (Object::String(str1), Object::String(str2)) => assert_eq!(str1, str2),
           _ => panic!("unhandle constant")
         }
       }

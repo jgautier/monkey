@@ -176,9 +176,14 @@ impl VM {
   fn execute_binary_operation(&mut self, op: Opcode) {
     let right = self.pop();
     let left = self.pop();
+
     let (left_value, right_value) = match (&*left, &*right) {
       (Object::Integer(val1), Object::Integer(val2)) => (val1,  val2),
-      _ => panic!("trying to add non integer values")
+      (Object::String(val1), Object::String(val2)) => {
+        self.push(Object::String(val1.to_string() + val2));
+        return
+      },
+      _ => panic!("unsupported types for binary operation {} {}", left.object_type(), right.object_type())
     };
     let result = match op {
       Opcode::OpAdd => left_value + right_value,
@@ -442,8 +447,19 @@ mod tests {
       VMTestCase {
         input: "let one = 1; let two = one + one; one + two".to_string(),
         expected: Object::Integer(3)
+      },
+      VMTestCase {
+        input: "\"monkey\"".to_string(),
+        expected: Object::String("monkey".to_string())
+      },
+      VMTestCase {
+        input: "\"mon\" + \"key\"".to_string(),
+        expected: Object::String("monkey".to_string())
+      },
+      VMTestCase {
+        input: "\"mon\" + \"key\" + \"banana\"".to_string(),
+        expected: Object::String("monkeybanana".to_string())
       }
-
     ];
     for test in tests {
       let program = parse(&test.input);
@@ -461,6 +477,9 @@ mod tests {
         }
         (Object::Null, Object::Null) => {
           assert_eq!(true, true)
+        },
+        (Object::String(val1), Object::String(val2)) => {
+          assert_eq!(val1, *val2)
         }
         _ => panic!("unhandled object type")
       }
