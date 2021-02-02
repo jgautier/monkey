@@ -170,6 +170,12 @@ impl Compiler {
           self.emit(Opcode::OpFalse, vec![]);
         }
       }
+      Expression::ArrayLiteral(expressions) => {
+        for expr in expressions {
+          self.compile_expression(expr)
+        }
+        self.emit(Opcode::OpArray, vec![expressions.len() as u32]);
+      }
       Expression::Identifier(id) => {
         let index = if let Some(sym) = self.symbol_table.get(id) {
           sym.index
@@ -460,7 +466,7 @@ mod tests {
           code::make(Opcode::OpPop, &vec![])
         ]
       },
-      CompilerTestCase{
+      CompilerTestCase {
         input: "\"monkey\"".to_string(),
         expected_constants: vec![Object::String("monkey".to_string())],
         expected_instructions: vec![
@@ -468,13 +474,49 @@ mod tests {
           code::make(Opcode::OpPop, &vec![])
         ]
       },
-      CompilerTestCase{
+      CompilerTestCase {
         input: "\"mon\" + \"key\"".to_string(),
         expected_constants: vec![Object::String("mon".to_string()), Object::String("key".to_string())],
         expected_instructions: vec![
           code::make(Opcode::OpConstant, &vec![0]),
           code::make(Opcode::OpConstant, &vec![1]),
           code::make(Opcode::OpAdd, &vec![]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "[]".to_string(),
+        expected_constants: vec![],
+        expected_instructions: vec![
+          code::make(Opcode::OpArray, &vec![0]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "[1, 2, 3]".to_string(),
+        expected_constants: vec![Object::Integer(1), Object::Integer(2), Object::Integer(3)],
+        expected_instructions: vec![
+          code::make(Opcode::OpConstant, &vec![0]),
+          code::make(Opcode::OpConstant, &vec![1]),
+          code::make(Opcode::OpConstant, &vec![2]),
+          code::make(Opcode::OpArray, &vec![3]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "[1 + 2, 3 - 4, 5 * 6]".to_string(),
+        expected_constants: vec![Object::Integer(1), Object::Integer(2), Object::Integer(3), Object::Integer(4), Object::Integer(5), Object::Integer(6)],
+        expected_instructions: vec![
+          code::make(Opcode::OpConstant, &vec![0]),
+          code::make(Opcode::OpConstant, &vec![1]),
+          code::make(Opcode::OpAdd, &vec![]),
+          code::make(Opcode::OpConstant, &vec![2]),
+          code::make(Opcode::OpConstant, &vec![3]),
+          code::make(Opcode::OpSub, &vec![]),
+          code::make(Opcode::OpConstant, &vec![4]),
+          code::make(Opcode::OpConstant, &vec![5]),
+          code::make(Opcode::OpMul, &vec![]),
+          code::make(Opcode::OpArray, &vec![3]),
           code::make(Opcode::OpPop, &vec![])
         ]
       }

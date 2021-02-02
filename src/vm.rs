@@ -124,6 +124,16 @@ impl VM {
         Opcode::OpFalse => {
           self.push(FALSE);
         }
+        Opcode::OpArray => {
+          let num_elements = u16::from_be_bytes(self.instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
+          ip += 2;
+          let mut elements = Vec::<Rc<Object>>::with_capacity(num_elements);
+          for _ in 0..num_elements {
+            elements.push(self.pop());
+          }
+          elements.reverse();
+          self.push(Object::Array(elements));
+        }
       }
     }
   }
@@ -459,6 +469,26 @@ mod tests {
       VMTestCase {
         input: "\"mon\" + \"key\" + \"banana\"".to_string(),
         expected: Object::String("monkeybanana".to_string())
+      },
+      VMTestCase {
+        input: "[]".to_string(),
+        expected: Object::Array(vec![])
+      },
+      VMTestCase {
+        input: "[1, 2, 3]".to_string(),
+        expected: Object::Array(vec![
+          Rc::new(Object::Integer(1)),
+          Rc::new(Object::Integer(2)),
+          Rc::new(Object::Integer(3))
+        ])
+      },
+      VMTestCase {
+        input: "[1 + 2, 3 * 4, 5 + 6]".to_string(),
+        expected: Object::Array(vec![
+          Rc::new(Object::Integer(3)),
+          Rc::new(Object::Integer(12)),
+          Rc::new(Object::Integer(11))
+        ])
       }
     ];
     for test in tests {
@@ -480,6 +510,18 @@ mod tests {
         },
         (Object::String(val1), Object::String(val2)) => {
           assert_eq!(val1, *val2)
+        },
+        (Object::Array(val1), Object::Array(val2)) => {
+          for (i, _) in val1.iter().enumerate() {
+            match (&*val1[i], &*val2[i]) {
+              (Object::Integer(int_1), Object::Integer(int_2)) => {
+                assert_eq!(int_1, int_2);
+              },
+              _ => {
+                panic!("unhandled array comparison")
+              }
+            }
+          }
         }
         _ => panic!("unhandled object type")
       }

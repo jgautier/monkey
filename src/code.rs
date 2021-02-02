@@ -19,7 +19,8 @@ pub enum Opcode {
   OpJump,
   OpNull,
   OpGetGlobal,
-  OpSetGlobal
+  OpSetGlobal,
+  OpArray
 }
 
 #[derive(Debug)]
@@ -49,6 +50,7 @@ impl Opcode {
       Opcode::OpNull => Definition {name: "OpNull".to_string(), operand_widths: vec![]},
       Opcode::OpGetGlobal => Definition {name: "OpGetGlobal".to_string(), operand_widths: vec![2]},
       Opcode::OpSetGlobal => Definition {name: "OpSetGlobal".to_string(), operand_widths: vec![2]},
+      Opcode::OpArray => Definition {name: "OpArray".to_string(), operand_widths: vec![2]},
     }
   }
   pub fn lookup(op: u8) -> Opcode {
@@ -71,6 +73,7 @@ impl Opcode {
       15 => Opcode::OpNull,
       16 => Opcode::OpGetGlobal,
       17 => Opcode::OpSetGlobal,
+      18 => Opcode::OpArray,
       _ => panic!("unknown op code")
     }
   }
