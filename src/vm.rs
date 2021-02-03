@@ -2,8 +2,10 @@ use crate::eval::Object;
 use crate::code::Instructions;
 use crate::compiler::Bytecode;
 use crate::code::Opcode;
+use crate::eval::HashKey;
 use std::convert::TryInto;
 use std::rc::Rc;
+use std::collections::HashMap;
 
 const STACK_SIZE:usize = 2048;
 const GLOBALS_SIZE:usize = 65536;
@@ -133,6 +135,31 @@ impl VM {
           }
           elements.reverse();
           self.push(Object::Array(elements));
+        },
+        Opcode::OpHash => {
+          let num_elements = u16::from_be_bytes(self.instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
+          ip += 2;
+          let mut hash = HashMap::new();
+          for _ in 0..num_elements / 2 {
+            let value = self.pop();
+            let key = self.pop();
+            match &*key {
+              Object::String(val) => {
+                hash.insert(HashKey::String(val.to_string()), value);
+              },
+              Object::Integer(val) => {
+                hash.insert(HashKey::Integer(*val), value);
+
+              },
+              Object::Boolean(val) => {
+                hash.insert(HashKey::Boolean(*val), value);
+              },
+              _ => {
+                panic!("unsupported hash key")
+              }
+            }
+          }
+          self.push(Object::Hash(hash))
         }
       }
     }
@@ -489,6 +516,24 @@ mod tests {
           Rc::new(Object::Integer(12)),
           Rc::new(Object::Integer(11))
         ])
+      },
+      VMTestCase {
+        input: "{}".to_string(),
+        expected: Object::Hash([].iter().cloned().collect())
+      },
+      VMTestCase {
+        input: "{1: 2, 2: 3}".to_string(),
+        expected: Object::Hash([
+          (HashKey::Integer(1), Rc::new(Object::Integer(2))),
+          (HashKey::Integer(2), Rc::new(Object::Integer(3)))
+        ].iter().cloned().collect())
+      },
+      VMTestCase {
+        input: "{1 + 1: 2 * 2, 3 + 3: 4 * 4}".to_string(),
+        expected: Object::Hash([
+          (HashKey::Integer(2), Rc::new(Object::Integer(4))),
+          (HashKey::Integer(6), Rc::new(Object::Integer(16)))
+        ].iter().cloned().collect())
       }
     ];
     for test in tests {
@@ -519,6 +564,20 @@ mod tests {
               },
               _ => {
                 panic!("unhandled array comparison")
+              }
+            }
+          }
+        },
+        (Object::Hash(hash1), Object::Hash(hash2)) => {
+          for key in hash1.keys() {
+            let val1 = &**hash1.get(key).unwrap();
+            let val2 = &**hash2.get(key).unwrap();
+            match (val1, val2) {
+              (Object::Integer(int1), Object::Integer(int2)) => {
+                assert_eq!(int1, int2)
+              }
+              _ => {
+                panic!("unhandled hash comparison")
               }
             }
           }

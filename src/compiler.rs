@@ -176,6 +176,13 @@ impl Compiler {
         }
         self.emit(Opcode::OpArray, vec![expressions.len() as u32]);
       }
+      Expression::HashLiteral(hash) => {
+        for pair in &hash.pairs {
+          self.compile_expression(pair.0);
+          self.compile_expression(pair.1);
+        }
+        self.emit(Opcode::OpHash, vec![(hash.pairs.len() * 2) as u32]);
+      }
       Expression::Identifier(id) => {
         let index = if let Some(sym) = self.symbol_table.get(id) {
           sym.index
@@ -517,6 +524,44 @@ mod tests {
           code::make(Opcode::OpConstant, &vec![5]),
           code::make(Opcode::OpMul, &vec![]),
           code::make(Opcode::OpArray, &vec![3]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "{}".to_string(),
+        expected_constants: vec![],
+        expected_instructions: vec![
+          code::make(Opcode::OpHash, &vec![0]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "{1: 2, 3: 4, 5: 6}".to_string(),
+        expected_constants: vec![Object::Integer(1), Object::Integer(2), Object::Integer(3), Object::Integer(4), Object::Integer(5), Object::Integer(6)],
+        expected_instructions: vec![
+          code::make(Opcode::OpConstant, &vec![0]),
+          code::make(Opcode::OpConstant, &vec![1]),
+          code::make(Opcode::OpConstant, &vec![2]),
+          code::make(Opcode::OpConstant, &vec![3]),
+          code::make(Opcode::OpConstant, &vec![4]),
+          code::make(Opcode::OpConstant, &vec![5]),
+          code::make(Opcode::OpHash, &vec![6]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "{1: 2 + 3, 4: 5 * 6}".to_string(),
+        expected_constants: vec![Object::Integer(1), Object::Integer(2), Object::Integer(3), Object::Integer(4), Object::Integer(5), Object::Integer(6)],
+        expected_instructions: vec![
+          code::make(Opcode::OpConstant, &vec![0]),
+          code::make(Opcode::OpConstant, &vec![1]),
+          code::make(Opcode::OpConstant, &vec![2]),
+          code::make(Opcode::OpAdd, &vec![]),
+          code::make(Opcode::OpConstant, &vec![3]),
+          code::make(Opcode::OpConstant, &vec![4]),
+          code::make(Opcode::OpConstant, &vec![5]),
+          code::make(Opcode::OpMul, &vec![]),
+          code::make(Opcode::OpHash, &vec![4]),
           code::make(Opcode::OpPop, &vec![])
         ]
       }
