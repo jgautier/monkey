@@ -17,7 +17,7 @@ fn print_prompt() {
    print!("{}", PROMPT);
    io::stdout().flush().unwrap();
 }
-fn start() {
+fn start(engine: &str) {
     let evaluator = &monkey::Evaluator::new();
     let mut constants:Vec<monkey::eval::Object> = Vec::new();
     let mut symbols:monkey::compiler::SymbolTable = HashMap::new();
@@ -35,14 +35,6 @@ fn start() {
                             println!("{}", error);
                         }
                     } else {
-                        let args: Vec<String> = env::args().collect();
-                        let mut engine = "eval";
-                        if args.len() > 1 {
-                            engine = args[1].split('=').collect::<Vec<&str>>()[1];
-                        }
-                        if engine != "eval" && engine != "vm" {
-                            panic!("Unsupported engine {}", engine);
-                        }
                         let now = Instant::now();
                         let result = if engine == "eval" {
                             evaluator.eval_program(program)
@@ -68,6 +60,15 @@ fn start() {
 }
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    let mut engine = "eval";
+    if args.len() > 1 {
+        engine = args[1].split('=').collect::<Vec<&str>>()[1];
+    }
+    if engine != "eval" && engine != "vm" {
+        panic!("Unsupported engine {}", engine);
+    }
+    println!("Started with engine {}", engine);
     print_prompt();
-    start();
+    start(engine);
 }

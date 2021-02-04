@@ -160,6 +160,27 @@ impl VM {
             }
           }
           self.push(Object::Hash(hash))
+        },
+        Opcode::OpIndex => {
+          let index = self.pop();
+          let left = self.pop();
+          match (&*left, &*index) {
+            (Object::Array(arr), Object::Integer(idx)) => {
+              let null = &Rc::new(NULL);
+              let val = arr.get(*idx as usize).unwrap_or(null);
+              self.push_rc(val.clone());
+            },
+            (Object::Hash(hash), _) => {
+              if let Some(hash_key) = HashKey::from_object(&index) {
+                let null = &Rc::new(NULL);
+                let val = hash.get(&hash_key).unwrap_or(null);
+                self.push_rc(val.clone());
+              } else {
+                panic!("unsupported hash key {}", index.object_type());
+              };
+            },
+            _ => panic!("index operator not supported on {} with {}", left.object_type(), index.object_type())
+          }
         }
       }
     }
@@ -232,10 +253,13 @@ impl VM {
     self.push(Object::Integer(result))
   }
   fn push(&mut self, object: Object) {
+    self.push_rc(Rc::new(object));
+  }
+  fn push_rc(&mut self, object: Rc<Object>) {
     if self.stack.len() <= self.sp {
-      self.stack.push(Rc::new(object))
+      self.stack.push(object)
     } else {
-      self.stack[self.sp] = Rc::new(object)
+      self.stack[self.sp] = object
     }
     self.sp += 1;
   }
@@ -534,6 +558,46 @@ mod tests {
           (HashKey::Integer(2), Rc::new(Object::Integer(4))),
           (HashKey::Integer(6), Rc::new(Object::Integer(16)))
         ].iter().cloned().collect())
+      },
+      VMTestCase {
+        input: "[1, 2, 3][1]".to_string(),
+        expected: Object::Integer(2)
+      },
+      VMTestCase {
+        input: "[1, 2, 3][0 + 2]".to_string(),
+        expected: Object::Integer(3)
+      },
+      VMTestCase {
+        input: "[[1, 1, 1]][0][0]".to_string(),
+        expected: Object::Integer(1)
+      },
+      VMTestCase {
+        input: "[][0]".to_string(),
+        expected: NULL
+      },
+      VMTestCase {
+        input: "[1, 2, 3][99]".to_string(),
+        expected: NULL
+      },
+      VMTestCase {
+        input: "[1][-1]".to_string(),
+        expected: NULL
+      },
+      VMTestCase {
+        input: "{1: 1, 2: 2}[1]".to_string(),
+        expected: Object::Integer(1)
+      },
+      VMTestCase {
+        input: "{1: 1, 2: 2}[2]".to_string(),
+        expected: Object::Integer(2)
+      },
+      VMTestCase {
+        input: "{1: 1}[0]".to_string(),
+        expected: NULL
+      },
+      VMTestCase {
+        input: "{}[0]".to_string(),
+        expected: NULL
       }
     ];
     for test in tests {

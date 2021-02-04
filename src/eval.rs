@@ -25,6 +25,20 @@ impl HashKey {
       }
     }
   }
+  pub fn from_object(obj: &Object) -> Option<HashKey> {
+    match obj {
+      Object::String(val) => {
+        Some(HashKey::String(val.to_string()))
+      },
+      Object::Integer(val) => {
+        Some(HashKey::Integer(*val))
+      },
+      Object::Boolean(val) => {
+        Some(HashKey::Boolean(*val))
+      },
+      _ => None
+    }
+  }
 }
 
 #[derive(Debug, Clone)]
