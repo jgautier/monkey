@@ -27,7 +27,8 @@ pub enum Opcode {
   OpReturnValue,
   OpReturn,
   OpSetLocal,
-  OpGetLocal
+  OpGetLocal,
+  OpGetBuiltIn
 }
 
 #[derive(Debug)]
@@ -64,7 +65,8 @@ impl Opcode {
       Opcode::OpReturnValue => Definition {name: "OpReturnValue".to_string(), operand_widths: vec![]},
       Opcode::OpReturn => Definition {name: "OpReturn".to_string(), operand_widths: vec![]},
       Opcode::OpSetLocal => Definition {name: "OpSetLocal".to_string(), operand_widths: vec![1]},
-      Opcode::OpGetLocal => Definition {name: "OpGetLocal".to_string(), operand_widths: vec![1]}
+      Opcode::OpGetLocal => Definition {name: "OpGetLocal".to_string(), operand_widths: vec![1]},
+      Opcode::OpGetBuiltIn => Definition {name: "OpGetBuiltIn".to_string(), operand_widths: vec![1]}
 
     }
   }
@@ -96,6 +98,7 @@ impl Opcode {
       23 => Opcode::OpReturn,
       24 => Opcode::OpSetLocal,
       25 => Opcode::OpGetLocal,
+      26 => Opcode::OpGetBuiltIn,
       _ => panic!("unknown op code")
     }
   }

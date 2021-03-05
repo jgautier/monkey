@@ -2,6 +2,7 @@ use crate::code::Instructions;
 use crate::code::Opcode;
 use crate::code;
 use crate::object::Object;
+use crate::object::get_built_in_vec;
 use crate::ast::Program;
 use crate::ast::Statement;
 use crate::ast::BlockStatement;
@@ -18,7 +19,8 @@ struct EmittedInstruction {
 #[derive(Debug, PartialEq, Clone)]
 pub enum SymbolScope {
   Global,
-  Local
+  Local,
+  BuiltIn
 }
 
 #[derive(Clone)]
@@ -30,7 +32,8 @@ pub struct Symbol {
 #[derive(Clone)]
 pub struct SymbolTable {
   store: HashMap<String, Symbol>,
-  outer: Option<Box<SymbolTable>>
+  outer: Option<Box<SymbolTable>>,
+  num_defs: usize
 }
 
 impl Default for SymbolTable {
@@ -42,22 +45,29 @@ impl SymbolTable {
   pub fn new() -> SymbolTable {
     SymbolTable {
       store: HashMap::new(),
-      outer: None
+      outer: None,
+      num_defs: 0
     }
   }
   fn new_enclosed(outer: SymbolTable) -> SymbolTable {
     SymbolTable {
       store: HashMap::new(),
-      outer: Some(Box::new(outer))
+      outer: Some(Box::new(outer)),
+      num_defs: 0
     }
+  }
+  pub fn define_builtin(&mut self, name: &str, index: usize) -> &Symbol {
+    self.store.insert(name.to_string(), Symbol{index, scope: SymbolScope::BuiltIn});
+    self.store.get(name).unwrap()
   }
   fn define(&mut self, name: &str) -> &Symbol {
     let symbol = if self.outer.is_some() {
-      Symbol{index: self.store.len(), scope: SymbolScope::Local}
+      Symbol{index: self.num_defs, scope: SymbolScope::Local}
     } else {
-      Symbol{index: self.store.len(), scope: SymbolScope::Global}
+      Symbol{index: self.num_defs, scope: SymbolScope::Global}
     };
     self.store.insert(name.to_string(), symbol);
+    self.num_defs += 1;
     self.store.get(name).unwrap()
   }
   fn resolve(&self, name: &str) -> Option<&Symbol> {
@@ -91,6 +101,11 @@ impl Default for Compiler {
 
 impl Compiler {
   pub fn new() -> Compiler {
+    let mut symbol_table = SymbolTable::default();
+    let built_ins = get_built_in_vec();
+    for (i, built_in) in built_ins.into_iter().enumerate() {
+      symbol_table.define_builtin(&built_in.0, i);
+    }
     Compiler {
       scopes: vec![
         CompilationScope {
@@ -100,7 +115,7 @@ impl Compiler {
         }
       ],
       constants: Vec::new(),
-      symbol_table: SymbolTable::default(),
+      symbol_table,
       scope_index: 0
     }
   }
@@ -139,6 +154,8 @@ impl Compiler {
         let scope = &symbol.scope;
         if let SymbolScope::Global = scope {
           self.emit(Opcode::OpSetGlobal, vec![index as u32]);
+        } else if let SymbolScope::BuiltIn = scope {
+          self.emit(Opcode::OpGetBuiltIn, vec![index as u32]);
         } else {
           self.emit(Opcode::OpSetLocal, vec![index as u32]);
         }
@@ -258,7 +275,9 @@ impl Compiler {
         let scope = &symbol.scope;
         if let SymbolScope::Global = scope {
           self.emit(Opcode::OpGetGlobal, vec![index as u32]);
-        } else {
+        } else if let SymbolScope::BuiltIn = scope {
+          self.emit(Opcode::OpGetBuiltIn, vec![index as u32]);
+        }else {
           self.emit(Opcode::OpGetLocal, vec![index as u32]);
         }
       }
@@ -910,6 +929,39 @@ mod tests {
           code::make(Opcode::OpConstant, &vec![2]),
           code::make(Opcode::OpConstant, &vec![3]),
           code::make(Opcode::OpCall, &vec![3]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "
+          len([]);
+          push([], 1);
+        ".to_string(),
+        expected_constants: vec![Object::Integer(1)],
+        expected_instructions: vec![
+          code::make(Opcode::OpGetBuiltIn, &vec![0]),
+          code::make(Opcode::OpArray, &vec![0]),
+          code::make(Opcode::OpCall, &vec![1]),
+          code::make(Opcode::OpPop, &vec![]),
+          code::make(Opcode::OpGetBuiltIn, &vec![4]),
+          code::make(Opcode::OpArray, &vec![0]),
+          code::make(Opcode::OpConstant, &vec![0]),
+          code::make(Opcode::OpCall, &vec![2]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "fn() { len([]) }".to_string(),
+        expected_constants: vec![
+          Object::CompiledFunction(vec![
+            code::make(Opcode::OpGetBuiltIn, &vec![0]),
+            code::make(Opcode::OpArray, &vec![0]),
+            code::make(Opcode::OpCall, &vec![1]),
+            code::make(Opcode::OpReturnValue, &vec![])
+          ].into_iter().flatten().collect(), 0, 0)
+        ],
+        expected_instructions: vec![
+          code::make(Opcode::OpConstant, &vec![0]),
           code::make(Opcode::OpPop, &vec![])
         ]
       }

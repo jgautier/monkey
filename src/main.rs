@@ -20,6 +20,10 @@ fn start(engine: &str) {
     let evaluator = &monkey::Evaluator::new();
     let mut constants:Vec<monkey::object::Object> = Vec::new();
     let mut symbols:monkey::compiler::SymbolTable = monkey::compiler::SymbolTable::new();
+    let built_ins = monkey::object::get_built_in_vec();
+    for (i, built_in) in built_ins.into_iter().enumerate() {
+        symbols.define_builtin(&built_in.0, i);
+    }
     let mut globals:Vec<Rc<monkey::object::Object>> = Vec::new();
     loop {
         let mut input = String::new();

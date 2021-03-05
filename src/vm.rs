@@ -3,6 +3,7 @@ use crate::code::Instructions;
 use crate::compiler::Bytecode;
 use crate::code::Opcode;
 use crate::object::HashKey;
+use crate::object::get_built_in_vec;
 use std::convert::TryInto;
 use std::rc::Rc;
 use std::collections::HashMap;
@@ -46,7 +47,8 @@ pub struct VM {
   stack: Vec<Rc<Object>>,
   sp: usize,
   frames: Vec<Frame>,
-  frames_index: usize
+  frames_index: usize,
+  built_ins: Vec<(String, Object)>
 }
 
 impl VM {
@@ -61,7 +63,8 @@ impl VM {
       stack: vec![Rc::new(NULL); STACK_SIZE],
       sp: 0,
       frames,
-      frames_index: 0
+      frames_index: 0,
+      built_ins: get_built_in_vec()
     }
   }
   fn push_frame(&mut self, frame: Frame) {
@@ -79,13 +82,18 @@ impl VM {
     self.frames[self.frames_index].ip = ip
   }
   pub fn new_with_global_store(bytecode: Bytecode, globals: Vec<Rc<Object>>) -> VM {
+    let main_func = Object::CompiledFunction(bytecode.instructions, 0, 0);
+    let frame = Frame::new(Rc::new(main_func), 0);
+    let mut frames = Vec::<Frame>::with_capacity(MAX_FRAMES);
+    frames.push(frame);
     VM {
       constants: bytecode.constants,
       globals,
-      stack: Vec::with_capacity(STACK_SIZE),
+      stack: vec![Rc::new(NULL); STACK_SIZE],
       sp: 0,
-      frames: Vec::with_capacity(MAX_FRAMES),
-      frames_index: 0
+      frames,
+      frames_index: 0,
+      built_ins: get_built_in_vec()
     }
   }
   pub fn last_popped_stack_elem(&self) -> Rc<Object>{
@@ -267,6 +275,15 @@ impl VM {
             let bp = frame.base_pointer;
             self.push_frame(frame);
             self.sp = bp + num_locals;
+          } else if let Object::BuiltIn(builtin) = *func {
+            let args = self.stack[self.sp - num_args..self.sp].to_vec();
+            let result = builtin(args);
+            self.sp = self.sp - num_args - 1;
+            if let Object::Null = *result {
+              self.push(NULL);
+            } else {
+              self.push_rc(result);
+            }
           } else {
             panic!("caling non-function")
           }
@@ -284,6 +301,18 @@ impl VM {
           self.pop_frame();
           self.sp = bp - 1;
           self.push(NULL);
+        },
+        Opcode::OpGetBuiltIn => {
+          let index = u8::from_be_bytes(instructions[ip..ip + 1].try_into().unwrap()) as usize;
+          ip += 1;
+          self.set_ip(ip);
+          let def = self.built_ins.get(index);
+          if let Some(builtin) = def {
+            let func = builtin.1.clone();
+            self.push(func);
+          } else {
+            panic!("function not found");
+          }
         }
       }
     }

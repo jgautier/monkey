@@ -3,7 +3,7 @@ use crate::object::Object;
 use crate::object::HashKey;
 use crate::object::Env;
 use crate::object::Environment;
-use crate::object::get_built_ins;
+use crate::object::get_built_in_map;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -19,7 +19,7 @@ impl Evaluator {
   pub fn new() -> Evaluator {
     Self {
       env: Rc::new(RefCell::new(Environment::new(None))),
-      built_ins: get_built_ins(),
+      built_ins: get_built_in_map(),
       null: Rc::new(Object::Null)
     }
   }
