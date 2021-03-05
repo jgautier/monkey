@@ -217,7 +217,7 @@ impl<'a> Parser<'a> {
         }
         program
     }
-    fn parse_return_statement(&mut self) -> Option<Statement> {
+    fn parse_return_statement(&mut self) -> Statement {
         self.next_token();
 
         let value = self.parse_expression(OperatorPrecedence::LOWEST).unwrap();
@@ -226,7 +226,7 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
 
-        Some(Statement::Return(value))
+        Statement::Return(value)
     }
     fn parse_let_statment(&mut self) -> Option<Statement> {
         self.next_token();
@@ -253,7 +253,7 @@ impl<'a> Parser<'a> {
     fn parse_statement(&mut self) -> Option<Statement> {
         match self.cur_token {
             lexer::Token::LET => self.parse_let_statment(),
-            lexer::Token::RETURN => self.parse_return_statement(),
+            lexer::Token::RETURN => Some(self.parse_return_statement()),
             _ => self.parse_expression_statement()
         }
     }
@@ -460,13 +460,13 @@ impl<'a> Parser<'a> {
         Some(Expression::HashLiteral(HashLiteral{ pairs }))
     }
 
-    fn parse_call_expression(&mut self, function: Expression) -> Option<Expression> {
-        Some(Expression::Call { function: Box::new(function), args: self.parse_expression_list(lexer::Token::RPAREN) })
+    fn parse_call_expression(&mut self, function: Expression) -> Expression {
+        Expression::Call { function: Box::new(function), args: self.parse_expression_list(lexer::Token::RPAREN) }
     }
 
     fn parse_infix_expression(&mut self, left: Expression) -> Option<Expression> {
         if self.cur_token == lexer::Token::LPAREN {
-            return self.parse_call_expression(left);
+            return Some(self.parse_call_expression(left));
         }
         if self.cur_token == lexer::Token::LBRACKET {
             self.next_token();
