@@ -3,6 +3,7 @@ use crate::object::Object;
 use crate::object::HashKey;
 use crate::object::Env;
 use crate::object::Environment;
+use crate::object::get_built_ins;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -16,93 +17,9 @@ pub struct Evaluator {
 impl Evaluator {
   #[allow(clippy::new_without_default)]
   pub fn new() -> Evaluator {
-    let mut built_ins = HashMap::new();
-    built_ins.insert("len".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
-      if args.len() > 1 {
-        return Rc::new(Object::Error(format!("Expected 1 argument got {}", args.len())));
-      }
-      match &*args[0] {
-        Object::String(string) => {
-          Rc::new(Object::Integer(string.len() as i64))
-        },
-        Object::Array(arr) => {
-          Rc::new(Object::Integer(arr.len() as i64))
-        },
-        _=> {
-          Rc::new(Object::Error(format!("Expected a String or Array got a {}", args[0].object_type())))
-        }
-      }
-    }));
-    built_ins.insert("first".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
-      if args.len() > 1 {
-        return Rc::new(Object::Error(format!("Expected 1 argument got {}", args.len())))
-      }
-      match &*args[0] {
-        Object::Array(arr) => {
-          arr[0].clone()
-        },
-        _=> {
-          Rc::new(Object::Error(format!("Expected a Array got a {}", args[0].object_type())))
-        }
-      }
-    }));
-    built_ins.insert("last".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
-      if args.len() > 1 {
-        return Rc::new(Object::Error(format!("Expected 1 argument got {}", args.len())));
-      }
-      match &*args[0] {
-        Object::Array(arr) => {
-          if let Some(obj) = arr.last() {
-            return obj.clone()
-          }
-          Rc::new(Object::Null)
-        },
-        _=> {
-          Rc::new(Object::Error(format!("Expected a Array got a {}", args[0].object_type())))
-        }
-      }
-    }));
-    built_ins.insert("rest".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
-      if args.len() > 1 {
-        return Rc::new(Object::Error(format!("Expected 1 argument got {}", args.len())));
-      }
-      match &*args[0] {
-        Object::Array(arr) => {
-          if let Some((_, elements)) = arr.split_first() {
-            Rc::new(Object::Array(elements.to_vec()))
-          } else {
-            Rc::new(Object::Null)
-          }
-        },
-        _=> {
-          Rc::new(Object::Error(format!("Expected a Array got a {}", args[0].object_type())))
-        }
-      }
-    }));
-    built_ins.insert("push".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
-      if args.len() > 2 {
-        return Rc::new(Object::Error(format!("Expected 2 argument got {}", args.len())))
-      }
-      match &*args[0] {
-        Object::Array(arr) => {
-          let mut new_arr = arr.to_vec();
-          new_arr.push(args[1].clone());
-          Rc::new(Object::Array(new_arr))
-        },
-        _=> {
-          Rc::new(Object::Error(format!("Expected a Array got a {}", args[0].object_type())))
-        }
-      }
-    }));
-    built_ins.insert("puts".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
-      for arg in args {
-        println!("{}", arg.inspect())
-      }
-      Rc::new(Object::Null)
-    }));
     Self {
       env: Rc::new(RefCell::new(Environment::new(None))),
-      built_ins,
+      built_ins: get_built_ins(),
       null: Rc::new(Object::Null)
     }
   }
