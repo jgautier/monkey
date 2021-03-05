@@ -9,7 +9,6 @@ use std::io;
 use std::io::Write;
 use std::time::{Instant};
 use std::env;
-use std::collections::HashMap;
 use std::rc::Rc;
 const PROMPT:&str = "🐒 >>> ";
 
@@ -20,7 +19,7 @@ fn print_prompt() {
 fn start(engine: &str) {
     let evaluator = &monkey::Evaluator::new();
     let mut constants:Vec<monkey::eval::Object> = Vec::new();
-    let mut symbols:monkey::compiler::SymbolTable = HashMap::new();
+    let mut symbols:monkey::compiler::SymbolTable = monkey::compiler::SymbolTable::new();
     let mut globals:Vec<Rc<monkey::eval::Object>> = Vec::new();
     loop {
         let mut input = String::new();

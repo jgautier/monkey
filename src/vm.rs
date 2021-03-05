@@ -9,35 +9,83 @@ use std::collections::HashMap;
 
 const STACK_SIZE:usize = 2048;
 const GLOBALS_SIZE:usize = 65536;
+const MAX_FRAMES:usize = 1024;
 const TRUE:Object = Object::Boolean(true);
 const FALSE:Object = Object::Boolean(false);
 const NULL:Object = Object::Null;
 
+struct Frame {
+  func: Rc<Object>,
+  ip: usize,
+  base_pointer: usize
+}
+
+impl Frame {
+  fn new(func: Rc<Object>, base_pointer: usize) -> Frame {
+    Frame {
+      func,
+      ip: 0,
+      base_pointer
+    }
+  }
+  fn instructions(&self) -> Instructions {
+    match &*self.func {
+      Object::CompiledFunction(ins, _, _) => {
+        ins.to_vec()
+      },
+      _ => {
+        panic!("function not stored in frame")
+      }
+    }
+  }
+}
+
 pub struct VM {
   constants: Vec<Object>,
   pub globals: Vec<Rc<Object>>,
-  instructions: Instructions,
   stack: Vec<Rc<Object>>,
-  sp: usize
+  sp: usize,
+  frames: Vec<Frame>,
+  frames_index: usize
 }
 
 impl VM {
   pub fn new(bytecode: Bytecode) -> VM {
+    let main_func = Object::CompiledFunction(bytecode.instructions, 0, 0);
+    let frame = Frame::new(Rc::new(main_func), 0);
+    let mut frames = Vec::<Frame>::with_capacity(MAX_FRAMES);
+    frames.push(frame);
     VM {
-      instructions: bytecode.instructions,
       constants: bytecode.constants,
       globals: Vec::with_capacity(GLOBALS_SIZE),
-      stack: Vec::with_capacity(STACK_SIZE),
-      sp: 0
+      stack: vec![Rc::new(NULL); STACK_SIZE],
+      sp: 0,
+      frames,
+      frames_index: 0
     }
+  }
+  fn push_frame(&mut self, frame: Frame) {
+    self.frames.push(frame);
+    self.frames_index += 1;
+  }
+  fn pop_frame(&mut self) {
+    self.frames.pop();
+    self.frames_index -= 1;
+  }
+  fn current_frame(&self) -> &Frame {
+    &self.frames[self.frames_index]
+  }
+  fn set_ip(&mut self, ip: usize) {
+    self.frames[self.frames_index].ip = ip
   }
   pub fn new_with_global_store(bytecode: Bytecode, globals: Vec<Rc<Object>>) -> VM {
     VM {
-      instructions: bytecode.instructions,
       constants: bytecode.constants,
       globals,
       stack: Vec::with_capacity(STACK_SIZE),
-      sp: 0
+      sp: 0,
+      frames: Vec::with_capacity(MAX_FRAMES),
+      frames_index: 0
     }
   }
   pub fn last_popped_stack_elem(&self) -> Rc<Object>{
@@ -45,14 +93,17 @@ impl VM {
   }
 
   pub fn run(&mut self) {
-    let mut ip = 0;
-    while ip < self.instructions.len() {
-      let op = Opcode::lookup(self.instructions[ip]);
+    while self.current_frame().ip < self.current_frame().instructions().len() {
+      let mut ip = self.current_frame().ip;
+      let instructions = self.current_frame().instructions();
+      let op = Opcode::lookup(instructions[ip]);
       ip += 1;
+      self.set_ip(ip);
       match op {
         Opcode::OpSetGlobal => {
-          let global_index = u16::from_be_bytes(self.instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
+          let global_index = u16::from_be_bytes(instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
           ip += 2;
+          self.set_ip(ip);
           let len = self.globals.len();
           let global = self.pop();
           if len <= global_index {
@@ -62,29 +113,48 @@ impl VM {
           }
         }
         Opcode::OpGetGlobal => {
-          let global_index = u16::from_be_bytes(self.instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
+          let global_index = u16::from_be_bytes(instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
           ip += 2;
+          self.set_ip(ip);
           self.push((*self.globals[global_index]).clone())
+        }
+        Opcode::OpSetLocal => {
+          let local_index = u8::from_be_bytes(instructions[ip..ip + 1].try_into().expect("invalid slice")) as usize;
+          ip += 1;
+          self.set_ip(ip);
+          let bp = self.current_frame().base_pointer;
+          self.stack[bp + local_index] = self.pop();
+        }
+        Opcode::OpGetLocal => {
+          let local_index = u8::from_be_bytes(instructions[ip..ip + 1].try_into().expect("invalid slice")) as usize;
+          ip += 1;
+          self.set_ip(ip);
+          let bp = self.current_frame().base_pointer;
+          self.push_rc(self.stack[bp + local_index].clone());
         }
         Opcode::OpNull => {
           self.push(NULL);
         }
         Opcode::OpConstant => {
-          let const_index = u16::from_be_bytes(self.instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
+          let const_index = u16::from_be_bytes(instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
           self.push(self.constants[const_index].clone());
           ip += 2;
+          self.set_ip(ip);
         }
         Opcode::OpJumpNotTruthy  => {
-          let pos = u16::from_be_bytes(self.instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
+          let pos = u16::from_be_bytes(instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
           ip += 2;
+          self.set_ip(ip);
           let condition = self.pop();
           if !self.is_truthy(condition) {
             ip = pos;
+            self.set_ip(ip);
           }
         }
         Opcode::OpJump => {
-          let pos = u16::from_be_bytes(self.instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
+          let pos = u16::from_be_bytes(instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
           ip = pos;
+          self.set_ip(ip);
         }
         Opcode::OpAdd | Opcode::OpSub | Opcode::OpDiv | Opcode::OpMul => {
           self.execute_binary_operation(op)
@@ -127,8 +197,9 @@ impl VM {
           self.push(FALSE);
         }
         Opcode::OpArray => {
-          let num_elements = u16::from_be_bytes(self.instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
+          let num_elements = u16::from_be_bytes(instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
           ip += 2;
+          self.set_ip(ip);
           let mut elements = Vec::<Rc<Object>>::with_capacity(num_elements);
           for _ in 0..num_elements {
             elements.push(self.pop());
@@ -137,8 +208,9 @@ impl VM {
           self.push(Object::Array(elements));
         },
         Opcode::OpHash => {
-          let num_elements = u16::from_be_bytes(self.instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
+          let num_elements = u16::from_be_bytes(instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
           ip += 2;
+          self.set_ip(ip);
           let mut hash = HashMap::new();
           for _ in 0..num_elements / 2 {
             let value = self.pop();
@@ -181,6 +253,37 @@ impl VM {
             },
             _ => panic!("index operator not supported on {} with {}", left.object_type(), index.object_type())
           }
+        },
+        Opcode::OpCall => {
+          let num_args = u8::from_be_bytes(instructions[ip..ip + 1].try_into().unwrap()) as usize;
+          ip += 1;
+          self.set_ip(ip);
+          let func = self.stack[self.sp - 1 - num_args].clone();
+          if let Object::CompiledFunction(_, num_locals, num_params) = *func {
+            if num_params != num_args {
+              panic!("wrong number of arguments wanted {} got {}", num_params, num_args);
+            }
+            let frame = Frame::new(func, self.sp - num_args);
+            let bp = frame.base_pointer;
+            self.push_frame(frame);
+            self.sp = bp + num_locals;
+          } else {
+            panic!("caling non-function")
+          }
+
+        },
+        Opcode::OpReturnValue => {
+          let return_value = self.pop();
+          let bp = self.current_frame().base_pointer;
+          self.pop_frame();
+          self.sp = bp - 1;
+          self.push_rc(return_value);
+        },
+        Opcode::OpReturn => {
+          let bp = self.current_frame().base_pointer;
+          self.pop_frame();
+          self.sp = bp - 1;
+          self.push(NULL);
         }
       }
     }
@@ -256,17 +359,13 @@ impl VM {
     self.push_rc(Rc::new(object));
   }
   fn push_rc(&mut self, object: Rc<Object>) {
-    if self.stack.len() <= self.sp {
-      self.stack.push(object)
-    } else {
-      self.stack[self.sp] = object
-    }
+    self.stack[self.sp] = object;
     self.sp += 1;
   }
   fn pop(&mut self) -> Rc<Object>{
-    let frame = self.stack.get(self.sp - 1);
+    let obj = self.stack.get(self.sp - 1);
     self.sp -= 1;
-    frame.unwrap().clone()
+    obj.unwrap().clone()
   }
 }
 
@@ -598,6 +697,121 @@ mod tests {
       VMTestCase {
         input: "{}[0]".to_string(),
         expected: NULL
+      },
+      VMTestCase {
+        input: "let fivePlusTen = fn() { 5 + 10; }; fivePlusTen();".to_string(),
+        expected: Object::Integer(15)
+      },
+      VMTestCase {
+        input: "let one = fn() { 1; }; let two = fn() { 2; }; one() + two()".to_string(),
+        expected: Object::Integer(3)
+      },
+      VMTestCase {
+        input: "let a = fn() { 1 }; let b = fn() { a() + 1 }; let c = fn() { b() + 1 }; c();".to_string(),
+        expected: Object::Integer(3)
+      },
+      VMTestCase {
+        input: "let earlyExit = fn() { return 99; 100; }; earlyExit();".to_string(),
+        expected: Object::Integer(99)
+      },
+      VMTestCase {
+        input: "let earlyExit = fn() { return 99; return 100; }; earlyExit();".to_string(),
+        expected: Object::Integer(99)
+      },
+      VMTestCase {
+        input: "let noReturn = fn() { }; noReturn();".to_string(),
+        expected: NULL
+      },
+      VMTestCase {
+        input: "let noReturn = fn() { };
+        let noReturnTwo = fn() { noReturn(); }; noReturn();
+        noReturnTwo();".to_string(),
+        expected: NULL
+      },
+      VMTestCase {
+        input: "
+        let returnsOne = fn() { 1; };
+        let returnsOneReturner = fn() { returnsOne; }; returnsOneReturner()();".to_string(),
+        expected: Object::Integer(1)
+      },
+      VMTestCase {
+        input: "
+        let one = fn() { let one = 1; one }; one();".to_string(),
+        expected: Object::Integer(1)
+      },
+      VMTestCase {
+        input: "
+          let oneAndTwo = fn() { let one = 1; let two = 2; one + two; }; oneAndTwo();
+        ".to_string(),
+        expected: Object::Integer(3)
+      },
+      VMTestCase {
+        input: "
+          let oneAndTwo = fn() { let one = 1; let two = 2; one + two; };
+          let threeAndFour = fn() { let three = 3; let four = 4; three + four; };
+          oneAndTwo() + threeAndFour();
+        ".to_string(),
+        expected: Object::Integer(10)
+      },
+      VMTestCase {
+        input: "
+          let firstFoobar = fn() { let foobar = 50; foobar; }; let secondFoobar = fn() { let foobar = 100; foobar; }; firstFoobar() + secondFoobar();
+        ".to_string(),
+        expected: Object::Integer(150)
+      },
+      VMTestCase {
+        input: "
+          let globalSeed = 50;
+          let minusOne = fn() {
+          let num = 1;
+          globalSeed - num; }
+                  let minusTwo = fn() {
+                      let num = 2;
+          globalSeed - num; }
+          minusOne() + minusTwo();
+        ".to_string(),
+        expected: Object::Integer(97)
+      },
+      VMTestCase {
+        input: "
+          let returnsOneReturner = fn() {
+            let returnsOne = fn() { 1; };
+            returnsOne;
+          }; returnsOneReturner()();
+        ".to_string(),
+        expected: Object::Integer(1)
+      },
+      VMTestCase {
+        input: "
+          let sum = fn(a, b) {
+            let c = a + b;
+            c;
+          };
+          sum(1, 2);
+        ".to_string(),
+        expected: Object::Integer(3)
+      },
+      VMTestCase {
+        input: "
+          let sum = fn(a, b) {
+            let c = a + b;
+            c;
+          };
+          sum(1, 2) + sum(3, 4);
+        ".to_string(),
+        expected: Object::Integer(10)
+      },
+      VMTestCase {
+        input: "
+        let sum = fn(a, b) {
+          let c = a + b;
+          c;
+        };
+        let outer = fn() {
+            sum(1, 2) + sum(3, 4);
+        };
+        outer();".to_string(),
+        expected: Object::Integer(10)
       }
     ];
     for test in tests {
@@ -649,5 +863,14 @@ mod tests {
         _ => panic!("unhandled object type")
       }
     }
+  }
+  #[test]
+  #[should_panic(expected = "wrong number of arguments wanted 0 got 1")]
+  fn test_wrong_args() {
+    let program = parse("fn() { 1; }(1);");
+    let mut compiler = Compiler::new();
+    compiler.compile(&program);
+    let mut vm = VM::new(compiler.bytecode());
+    vm.run()
   }
 }

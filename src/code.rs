@@ -22,7 +22,12 @@ pub enum Opcode {
   OpSetGlobal,
   OpArray,
   OpHash,
-  OpIndex
+  OpIndex,
+  OpCall,
+  OpReturnValue,
+  OpReturn,
+  OpSetLocal,
+  OpGetLocal
 }
 
 #[derive(Debug)]
@@ -54,7 +59,13 @@ impl Opcode {
       Opcode::OpSetGlobal => Definition {name: "OpSetGlobal".to_string(), operand_widths: vec![2]},
       Opcode::OpArray => Definition {name: "OpArray".to_string(), operand_widths: vec![2]},
       Opcode::OpHash => Definition {name: "OpHash".to_string(), operand_widths: vec![2]},
-      Opcode::OpIndex => Definition {name: "OpIndex".to_string(), operand_widths: vec![]}
+      Opcode::OpIndex => Definition {name: "OpIndex".to_string(), operand_widths: vec![]},
+      Opcode::OpCall => Definition {name: "OpCall".to_string(), operand_widths: vec![1]},
+      Opcode::OpReturnValue => Definition {name: "OpReturnValue".to_string(), operand_widths: vec![]},
+      Opcode::OpReturn => Definition {name: "OpReturn".to_string(), operand_widths: vec![]},
+      Opcode::OpSetLocal => Definition {name: "OpSetLocal".to_string(), operand_widths: vec![1]},
+      Opcode::OpGetLocal => Definition {name: "OpGetLocal".to_string(), operand_widths: vec![1]}
+
     }
   }
   pub fn lookup(op: u8) -> Opcode {
@@ -80,6 +91,11 @@ impl Opcode {
       18 => Opcode::OpArray,
       19 => Opcode::OpHash,
       20 => Opcode::OpIndex,
+      21 => Opcode::OpCall,
+      22 => Opcode::OpReturnValue,
+      23 => Opcode::OpReturn,
+      24 => Opcode::OpSetLocal,
+      25 => Opcode::OpGetLocal,
       _ => panic!("unknown op code")
     }
   }
@@ -128,6 +144,9 @@ pub fn make(op: Opcode, operands: &[u32]) -> Instructions {
         let operand_as_u16 = *operand as u16;
         instruction.extend_from_slice(&operand_as_u16.to_be_bytes());
       }
+      1 => {
+        instruction.push(operands[i] as u8)
+      }
       _ => {
         panic!("unhandled operand width");
       }
@@ -144,6 +163,9 @@ fn read_operands(def: &Definition, instructions: Instructions) -> (Vec<u32>, usi
     match width {
       2 => {
         operands.push(u16::from_be_bytes(instructions[offset..offset + *width as usize].try_into().expect("slice with incorrect length")) as u32)
+      },
+      1 => {
+        operands.push(instructions[offset] as u32)
       }
       _ => {
         panic!("unhandled operand width")
@@ -175,6 +197,11 @@ mod tests {
       operands: vec![],
       expected: vec![Opcode::OpAdd as u8]
     });
+    tests.push(TestOp {
+      op: Opcode::OpGetLocal,
+      operands: vec![255],
+      expected: vec![Opcode::OpGetLocal as u8, 255]
+    });
     for test in tests {
       let instruction = make(test.op, &test.operands);
       assert_eq!(instruction.len(), test.expected.len());
@@ -193,12 +220,14 @@ mod tests {
   fn test_instruction_string() {
     let mut instructions = Vec::new();
     instructions.append(&mut make(Opcode::OpAdd, &vec![]));
+    instructions.append(&mut make(Opcode::OpGetLocal, &vec![1]));
     instructions.append(&mut make(Opcode::OpConstant, &vec![2]));
     instructions.append(&mut make(Opcode::OpConstant, &vec![65535]));
 
     let expected = "0000 OpAdd
-0001 OpConstant 2
-0004 OpConstant 65535
+0001 OpGetLocal 1
+0003 OpConstant 2
+0006 OpConstant 65535
 ";
 
     assert_eq!(expected, instructions.string())
@@ -211,6 +240,11 @@ mod tests {
       op: Opcode::OpConstant,
       operands: vec![65535],
       bytes_read: 2
+    });
+    tests.push(TestRead {
+      op: Opcode::OpGetLocal,
+      operands: vec![255],
+      bytes_read: 1
     });
     for test in tests.iter() {
       let instructions = make(test.op, &test.operands);

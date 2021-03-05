@@ -1,5 +1,6 @@
 use crate::ast;
 use crate::ast::Node;
+use crate::code::Instructions;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -52,7 +53,8 @@ pub enum Object {
   BuiltIn(fn(Vec<Rc<Object>>) -> Rc<Object>),
   Array(Vec<Rc<Object>>),
   Hash(HashMap<HashKey, Rc<Object>>),
-  Error(String)
+  Error(String),
+  CompiledFunction(Instructions, usize, usize)
 }
 
 impl Object {
@@ -87,6 +89,9 @@ impl Object {
       },
       Object::Hash(_) => {
         "HASH".to_string()
+      },
+      Object::CompiledFunction(_,_,_) => {
+        "COMPILED_FUNCTION".to_string()
       }
     }
   }
@@ -127,6 +132,9 @@ impl Object {
       Object::Hash(hash) => {
         let pairs = hash.iter().map(|pair| format!("{}: {}", pair.0.inspect(), pair.1.inspect())).collect::<Vec<String>>().join(", ");
         format!("{{{}}}", pairs)
+      },
+      Object::CompiledFunction(cf, _, _) => {
+        format!("{:?}", cf)
       }
     }
   }

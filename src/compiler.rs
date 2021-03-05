@@ -15,38 +15,73 @@ struct EmittedInstruction {
   position: u32
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum SymbolScope {
-  Global
+  Global,
+  Local
 }
 
+#[derive(Clone)]
 pub struct Symbol {
-  index: usize
+  index: usize,
+  scope: SymbolScope
 }
 
-pub type SymbolTable = HashMap<String, Symbol>;
-
-trait SymbolTableExt {
-  fn define(&mut self, name: &str) -> &Symbol;
-  fn resolve(&mut self, name: &str) -> Option<&Symbol>;
+#[derive(Clone)]
+pub struct SymbolTable {
+  store: HashMap<String, Symbol>,
+  outer: Option<Box<SymbolTable>>
 }
 
-impl SymbolTableExt for SymbolTable {
+impl Default for SymbolTable {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+impl SymbolTable {
+  pub fn new() -> SymbolTable {
+    SymbolTable {
+      store: HashMap::new(),
+      outer: None
+    }
+  }
+  fn new_enclosed(outer: SymbolTable) -> SymbolTable {
+    SymbolTable {
+      store: HashMap::new(),
+      outer: Some(Box::new(outer))
+    }
+  }
   fn define(&mut self, name: &str) -> &Symbol {
-    let symbol = Symbol{index: self.len()};
-    self.insert(name.to_string(), symbol);
-    self.get(name).unwrap()
+    let symbol = if self.outer.is_some() {
+      Symbol{index: self.store.len(), scope: SymbolScope::Local}
+    } else {
+      Symbol{index: self.store.len(), scope: SymbolScope::Global}
+    };
+    self.store.insert(name.to_string(), symbol);
+    self.store.get(name).unwrap()
   }
-  fn resolve(&mut self, name: &str) -> Option<&Symbol> {
-    self.get(name)
+  fn resolve(&self, name: &str) -> Option<&Symbol> {
+    if let Some(symbol) = self.store.get(name) {
+      Some(symbol)
+    } else if let Some(outer) = &self.outer {
+      outer.resolve(name)
+    } else {
+      None
+    }
   }
+}
+
+struct CompilationScope {
+  instructions: Instructions,
+  last_instruction: Option<EmittedInstruction>,
+  previous_instruction: Option<EmittedInstruction>
 }
 
 pub struct Compiler {
-  instructions: Instructions,
   pub constants: Vec<Object>,
   pub symbol_table: SymbolTable,
-  last_instruction: Option<EmittedInstruction>,
-  previous_instruction: Option<EmittedInstruction>
+  scopes: Vec<CompilationScope>,
+  scope_index: usize
 }
 impl Default for Compiler {
   fn default() -> Self {
@@ -57,21 +92,34 @@ impl Default for Compiler {
 impl Compiler {
   pub fn new() -> Compiler {
     Compiler {
-      instructions: Vec::new(),
+      scopes: vec![
+        CompilationScope {
+          instructions: Vec::new(),
+          last_instruction: None,
+          previous_instruction: None
+        }
+      ],
       constants: Vec::new(),
-      symbol_table: SymbolTable::new(),
-      last_instruction: None,
-      previous_instruction: None
+      symbol_table: SymbolTable::default(),
+      scope_index: 0
     }
   }
   pub fn new_with_state(symbol_table: SymbolTable, constants: Vec<Object>) -> Compiler {
     Compiler {
-      instructions: Vec::new(),
+      scopes: vec![
+        CompilationScope {
+          instructions: Vec::new(),
+          last_instruction: None,
+          previous_instruction: None
+        }
+      ],
       constants,
       symbol_table,
-      last_instruction: None,
-      previous_instruction: None
+      scope_index: 0
     }
+  }
+  pub fn current_instructions(&mut self) -> &mut Instructions {
+    &mut self.scopes[self.scope_index].instructions
   }
   pub fn compile(&mut self, program: &Program) {
     for statement in program.statements.iter() {
@@ -86,10 +134,19 @@ impl Compiler {
       },
       Statement::Let{identifier, value} => {
         self.compile_expression(value);
-        let index = self.symbol_table.define(identifier).index;
-        self.emit(Opcode::OpSetGlobal, vec![index as u32]);
+        let symbol = self.symbol_table.define(identifier);
+        let index = symbol.index;
+        let scope = &symbol.scope;
+        if let SymbolScope::Global = scope {
+          self.emit(Opcode::OpSetGlobal, vec![index as u32]);
+        } else {
+          self.emit(Opcode::OpSetLocal, vec![index as u32]);
+        }
+      },
+      Statement::Return(expr) => {
+        self.compile_expression(expr);
+        self.emit(Opcode::OpReturnValue, vec![]);
       }
-      _ => panic!("unhandled statement type")
     };
   }
   fn compile_blockstatement(&mut self, block_statement: &BlockStatement) {
@@ -104,25 +161,28 @@ impl Compiler {
         // emit op with bogus value and will update later
         let jump_not_truthy_pos = self.emit(Opcode::OpJumpNotTruthy, vec![9999]);
         self.compile_blockstatement(consequence);
-        if let Some(instruction) = &self.last_instruction {
+
+        if let Some(instruction) = &self.scopes[self.scope_index].last_instruction {
           if let Opcode::OpPop = instruction.opcode {
-            self.instructions.pop();
-            self.last_instruction = self.previous_instruction.clone();
+            self.current_instructions().pop();
+            self.scopes[self.scope_index].last_instruction = self.scopes[self.scope_index].previous_instruction.clone();
           }
         }
         let jump_pos = self.emit(Opcode::OpJump, vec![9999]);
-        self.change_operand(jump_not_truthy_pos, self.instructions.len() as u32);
+        let current_instructions_len = self.current_instructions().len();
+        self.change_operand(jump_not_truthy_pos, current_instructions_len as u32);
         if let Some(alt) = alternative {
           self.compile_blockstatement(alt);
         } else {
           self.emit(Opcode::OpNull, vec![]);
         }
-        if let Some(instruction) = &self.last_instruction {
+        if let Some(instruction) = &self.scopes[self.scope_index].last_instruction {
           if let Opcode::OpPop = instruction.opcode {
-            self.instructions.pop();
-            self.last_instruction = self.previous_instruction.clone();
+            self.current_instructions().pop();
+            self.scopes[self.scope_index].last_instruction = self.scopes[self.scope_index].previous_instruction.clone();
           }
-          self.change_operand(jump_pos, self.instructions.len() as u32)
+          let current_instructions_len = self.current_instructions().len();
+          self.change_operand(jump_pos, current_instructions_len as u32)
         }
       }
       Expression::Infix{operator, left, right} => {
@@ -189,25 +249,63 @@ impl Compiler {
         self.emit(Opcode::OpIndex, vec![]);
       }
       Expression::Identifier(id) => {
-        let index = if let Some(sym) = self.symbol_table.get(id) {
-          sym.index
+        let symbol = if let Some(sym) = self.symbol_table.resolve(id) {
+          sym
         } else {
           panic!("undefined variable {}", id);
         };
-        self.emit(Opcode::OpGetGlobal, vec![index as u32]);
+        let index = symbol.index;
+        let scope = &symbol.scope;
+        if let SymbolScope::Global = scope {
+          self.emit(Opcode::OpGetGlobal, vec![index as u32]);
+        } else {
+          self.emit(Opcode::OpGetLocal, vec![index as u32]);
+        }
       }
-      _ => panic!("unhandled expression")
+      Expression::Fn{params, body} => {
+        self.enter_scope();
+        for param in params {
+          self.symbol_table.define(param);
+        }
+        self.compile_blockstatement(body);
+        let last_instruction = self.scopes[self.scope_index].last_instruction.clone();
+        if let Some(instruction) = last_instruction {
+          if let Opcode::OpPop = instruction.opcode {
+            let return_value = code::make(Opcode::OpReturnValue, &[]);
+            self.replace_instruction(instruction.position as usize, return_value);
+            self.scopes[self.scope_index].last_instruction = Some(EmittedInstruction {
+              position: instruction.position,
+              opcode: Opcode::OpReturnValue
+            });
+          }
+        } else {
+          self.emit(Opcode::OpReturn, vec![]);
+        }
+        let num_locals = self.symbol_table.store.len();
+        let instructions = self.leave_scope();
+        let compiled_fn = Object::CompiledFunction(instructions, num_locals, params.len());
+        let constant_index = self.add_constant(compiled_fn);
+        self.emit(Opcode::OpConstant, vec![constant_index]);
+      },
+      Expression::Call{function, args} => {
+        self.compile_expression(function);
+        for arg in args {
+          self.compile_expression(arg);
+        }
+        self.emit(Opcode::OpCall, vec![args.len() as u32]);
+      }
     };
   }
 
   fn replace_instruction(&mut self, position: usize, new_instruction: Vec<u8>) {
+    let instructions = self.current_instructions();
     for (i, byte) in new_instruction.iter().enumerate() {
-      self.instructions[i + position] = *byte
+      instructions[i + position] = *byte
     }
   }
 
   fn change_operand(&mut self, position: usize, operand: u32) {
-    let op_code = Opcode::lookup(self.instructions[position]);
+    let op_code = Opcode::lookup(self.current_instructions()[position]);
     let new_instruction = code::make(op_code, &[operand]);
     self.replace_instruction(position, new_instruction);
   }
@@ -221,25 +319,47 @@ impl Compiler {
   fn emit(&mut self, op: Opcode, operands: Vec<u32>) -> usize {
     let mut instruction = code::make(op, &operands);
     let pos = self.add_instruction(&mut instruction);
-    let previous = self.last_instruction.clone();
+    let previous = self.scopes[self.scope_index].last_instruction.clone();
     let last = EmittedInstruction{
       opcode: op,
       position: pos as u32
     };
-    self.previous_instruction = previous;
-    self.last_instruction = Some(last);
+    self.scopes[self.scope_index].previous_instruction = previous;
+    self.scopes[self.scope_index].last_instruction = Some(last);
     pos
   }
 
   fn add_instruction(&mut self, instruction: &mut Vec<u8>) -> usize {
-    let position = &self.instructions.len();
-    self.instructions.append(instruction);
-    *position
+    let instructions = self.current_instructions();
+    let position = instructions.len();
+    instructions.append(instruction);
+    position
   }
 
-  pub fn bytecode(&self) -> Bytecode {
+  fn enter_scope(&mut self) {
+    let scope = CompilationScope {
+      instructions: Vec::new(),
+      last_instruction: None,
+      previous_instruction: None
+    };
+    self.scopes.push(scope);
+    self.scope_index += 1;
+    let table = self.symbol_table.clone();
+    self.symbol_table = SymbolTable::new_enclosed(table);
+  }
+
+  fn leave_scope(&mut self) -> Instructions {
+    let insructions = self.current_instructions().clone();
+    self.scopes.pop();
+    self.scope_index -= 1;
+    let table = self.symbol_table.outer.take().unwrap();
+    self.symbol_table = *table;
+    insructions
+  }
+
+  pub fn bytecode(&mut self) -> Bytecode {
     Bytecode {
-      instructions: self.instructions.clone(),
+      instructions: self.current_instructions().clone(),
       constants: self.constants.clone()
     }
   }
@@ -598,6 +718,200 @@ mod tests {
           code::make(Opcode::OpIndex, &vec![]),
           code::make(Opcode::OpPop, &vec![])
         ]
+      },
+      CompilerTestCase {
+        input: "fn () { return 5 + 10 }".to_string(),
+        expected_constants: vec![
+          Object::Integer(5),
+          Object::Integer(10),
+          Object::CompiledFunction(vec![
+            code::make(Opcode::OpConstant, &vec![0]),
+            code::make(Opcode::OpConstant, &vec![1]),
+            code::make(Opcode::OpAdd, &vec![]),
+            code::make(Opcode::OpReturnValue, &vec![])
+          ].into_iter().flatten().collect(), 0, 0)
+        ],
+        expected_instructions: vec![
+            code::make(Opcode::OpConstant, &vec![2]),
+            code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "fn () { 5 + 10 }".to_string(),
+        expected_constants: vec![
+          Object::Integer(5),
+          Object::Integer(10),
+          Object::CompiledFunction(vec![
+            code::make(Opcode::OpConstant, &vec![0]),
+            code::make(Opcode::OpConstant, &vec![1]),
+            code::make(Opcode::OpAdd, &vec![]),
+            code::make(Opcode::OpReturnValue, &vec![])
+          ].into_iter().flatten().collect(), 0, 0)
+        ],
+        expected_instructions: vec![
+            code::make(Opcode::OpConstant, &vec![2]),
+            code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "fn () {}".to_string(),
+        expected_constants: vec![
+          Object::CompiledFunction(vec![
+            code::make(Opcode::OpReturn, &vec![])
+          ].into_iter().flatten().collect(), 0, 0)
+        ],
+        expected_instructions: vec![
+            code::make(Opcode::OpConstant, &vec![0]),
+            code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "fn() { 24 }();".to_string(),
+        expected_constants: vec![
+          Object::Integer(24),
+          Object::CompiledFunction(vec![
+            code::make(Opcode::OpConstant, &vec![0]),
+            code::make(Opcode::OpReturnValue, &vec![]),
+          ].into_iter().flatten().collect(), 0, 0)
+        ],
+        expected_instructions: vec![
+            code::make(Opcode::OpConstant, &vec![1]),
+            code::make(Opcode::OpCall, &vec![0]),
+            code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "
+          let noArg = fn() { 24 };
+          noArg();
+        ".to_string(),
+        expected_constants: vec![
+          Object::Integer(24),
+          Object::CompiledFunction(vec![
+            code::make(Opcode::OpConstant, &vec![0]),
+            code::make(Opcode::OpReturnValue, &vec![]),
+          ].into_iter().flatten().collect(), 0, 0)
+        ],
+        expected_instructions: vec![
+            code::make(Opcode::OpConstant, &vec![1]),
+            code::make(Opcode::OpSetGlobal, &vec![0]),
+            code::make(Opcode::OpGetGlobal, &vec![0]),
+            code::make(Opcode::OpCall, &vec![0]),
+            code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "
+          let num = 55;
+          fn() { num }
+        ".to_string(),
+        expected_constants: vec![
+          Object::Integer(55),
+          Object::CompiledFunction(vec![
+            code::make(Opcode::OpGetGlobal, &vec![0]),
+            code::make(Opcode::OpReturnValue, &vec![])
+          ].into_iter().flatten().collect(), 0, 0)
+        ],
+        expected_instructions: vec![
+          code::make(Opcode::OpConstant, &vec![0]),
+          code::make(Opcode::OpSetGlobal, &vec![0]),
+          code::make(Opcode::OpConstant, &vec![1]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "
+          fn() {
+            let num = 55;
+            num
+        }".to_string(),
+        expected_constants: vec![
+          Object::Integer(55),
+          Object::CompiledFunction(vec![
+            code::make(Opcode::OpConstant, &vec![0]),
+            code::make(Opcode::OpSetLocal, &vec![0]),
+            code::make(Opcode::OpGetLocal, &vec![0]),
+            code::make(Opcode::OpReturnValue, &vec![])
+          ].into_iter().flatten().collect(), 1, 0)
+        ],
+        expected_instructions: vec![
+          code::make(Opcode::OpConstant, &vec![1]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "
+          fn() {
+            let a = 55;
+            let b = 77;
+            a+b
+          }".to_string(),
+        expected_constants: vec![
+          Object::Integer(55),
+          Object::Integer(77),
+          Object::CompiledFunction(vec![
+            code::make(Opcode::OpConstant, &vec![0]),
+            code::make(Opcode::OpSetLocal, &vec![0]),
+            code::make(Opcode::OpConstant, &vec![1]),
+            code::make(Opcode::OpSetLocal, &vec![1]),
+            code::make(Opcode::OpGetLocal, &vec![0]),
+            code::make(Opcode::OpGetLocal, &vec![1]),
+            code::make(Opcode::OpAdd, &vec![]),
+            code::make(Opcode::OpReturnValue, &vec![])
+          ].into_iter().flatten().collect(), 2, 0)
+        ],
+        expected_instructions: vec![
+          code::make(Opcode::OpConstant, &vec![2]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "
+          let oneArg = fn(a) { a }; oneArg(24);
+        ".to_string(),
+        expected_constants: vec![
+          Object::CompiledFunction(vec![
+            code::make(Opcode::OpGetLocal, &vec![0]),
+            code::make(Opcode::OpReturnValue, &vec![])
+          ].into_iter().flatten().collect(), 0, 1),
+          Object::Integer(24)
+        ],
+        expected_instructions: vec![
+          code::make(Opcode::OpConstant, &vec![0]),
+          code::make(Opcode::OpSetGlobal, &vec![0]),
+          code::make(Opcode::OpGetGlobal, &vec![0]),
+          code::make(Opcode::OpConstant, &vec![1]),
+          code::make(Opcode::OpCall, &vec![1]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
+      },
+      CompilerTestCase {
+        input: "
+          let manyArg = fn(a, b, c) { a; b; c; }; manyArg(24, 25, 26);
+        ".to_string(),
+        expected_constants: vec![
+          Object::CompiledFunction(vec![
+            code::make(Opcode::OpGetLocal, &vec![0]),
+            code::make(Opcode::OpPop, &vec![]),
+            code::make(Opcode::OpGetLocal, &vec![1]),
+            code::make(Opcode::OpPop, &vec![]),
+            code::make(Opcode::OpGetLocal, &vec![2]),
+            code::make(Opcode::OpReturnValue, &vec![])
+          ].into_iter().flatten().collect(), 0, 3),
+          Object::Integer(24),
+          Object::Integer(25),
+          Object::Integer(26)
+        ],
+        expected_instructions: vec![
+          code::make(Opcode::OpConstant, &vec![0]),
+          code::make(Opcode::OpSetGlobal, &vec![0]),
+          code::make(Opcode::OpGetGlobal, &vec![0]),
+          code::make(Opcode::OpConstant, &vec![1]),
+          code::make(Opcode::OpConstant, &vec![2]),
+          code::make(Opcode::OpConstant, &vec![3]),
+          code::make(Opcode::OpCall, &vec![3]),
+          code::make(Opcode::OpPop, &vec![])
+        ]
       }
     ];
     run_tests(test)
@@ -621,9 +935,77 @@ mod tests {
         match (&bytecode.constants[i], constant) {
           (Object::Integer(val), Object::Integer(val2)) => assert_eq!(val, val2),
           (Object::String(str1), Object::String(str2)) => assert_eq!(str1, str2),
-          _ => panic!("unhandle constant")
+          (Object::CompiledFunction(ins1, _, _), Object::CompiledFunction(ins2, _, _)) => {
+            for (index, ins) in ins1.iter().enumerate() {
+              assert_eq!(*ins, ins2[index])
+            }
+          }
+          _ => panic!("unhandle constant {:?} {:?}", constant, &bytecode.constants[i])
         }
       }
+    }
+  }
+  #[test]
+  fn test_resolve_local() {
+    let mut global = SymbolTable::new();
+    global.define("a");
+    global.define("b");
+
+    let mut local = SymbolTable::new_enclosed(global);
+    local.define("c");
+    local.define("d");
+
+    let expected = vec![
+      ("a", SymbolScope::Global, 0),
+      ("b", SymbolScope::Global, 1),
+      ("c", SymbolScope::Local, 0),
+      ("d", SymbolScope::Local, 1)
+    ];
+
+    for symbol in expected {
+      let resolved = local.resolve(symbol.0).unwrap();
+      assert_eq!(resolved.scope, symbol.1);
+      assert_eq!(resolved.index, symbol.2);
+    }
+  }
+  #[test]
+  fn test_nested_resolve() {
+    let mut global = SymbolTable::new();
+    global.define("a");
+    global.define("b");
+
+    let mut first_local = SymbolTable::new_enclosed(global);
+    first_local.define("c");
+    first_local.define("d");
+
+    let expected = vec![
+      ("a", SymbolScope::Global, 0),
+      ("b", SymbolScope::Global, 1),
+      ("c", SymbolScope::Local, 0),
+      ("d", SymbolScope::Local, 1)
+    ];
+
+    for symbol in expected {
+      let resolved = first_local.resolve(symbol.0).unwrap();
+      assert_eq!(resolved.scope, symbol.1);
+      assert_eq!(resolved.index, symbol.2);
+    }
+
+    let mut second_local = SymbolTable::new_enclosed(first_local);
+    second_local.define("e");
+    second_local.define("f");
+
+    let expected = vec![
+      ("a", SymbolScope::Global, 0),
+      ("b", SymbolScope::Global, 1),
+      ("e", SymbolScope::Local, 0),
+      ("f", SymbolScope::Local, 1)
+    ];
+
+    for symbol in expected {
+      let resolved = second_local.resolve(symbol.0).unwrap();
+      assert_eq!(resolved.scope, symbol.1);
+      assert_eq!(resolved.index, symbol.2);
     }
   }
 }
