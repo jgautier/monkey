@@ -3,6 +3,7 @@ pub mod eval;
 mod ast;
 mod lexer;
 mod code;
+pub mod object;
 pub mod compiler;
 mod vm;
 pub use crate::eval::Evaluator;

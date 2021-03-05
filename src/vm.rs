@@ -1,8 +1,8 @@
-use crate::eval::Object;
+use crate::object::Object;
 use crate::code::Instructions;
 use crate::compiler::Bytecode;
 use crate::code::Opcode;
-use crate::eval::HashKey;
+use crate::object::HashKey;
 use std::convert::TryInto;
 use std::rc::Rc;
 use std::collections::HashMap;

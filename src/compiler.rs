@@ -1,7 +1,7 @@
 use crate::code::Instructions;
 use crate::code::Opcode;
 use crate::code;
-use crate::eval::Object;
+use crate::object::Object;
 use crate::ast::Program;
 use crate::ast::Statement;
 use crate::ast::BlockStatement;
