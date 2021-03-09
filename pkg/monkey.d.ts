@@ -1,7 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
-* @param {string} prog 
-* @returns {string} 
+* @param {string} prog
+* @param {string} engine
+* @returns {string}
 */
-export function eval_program(prog: string): string;
+export function run_program(prog: string, engine: string): string;
