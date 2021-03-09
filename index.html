@@ -5,12 +5,20 @@
       await init()
       const program = document.getElementById('program')
       const result = document.getElementById('result')
+      const engine = document.getElementById('engine')
       document.getElementById('submit').addEventListener('click', () => {
-        result.innerHTML =  eval_program(program.value)
+        result.innerHTML =  eval_program(program.value, engine.value)
       })
     })
   </script>
   <body>
+    <div>
+      <label for="engine">Select Engine:</label>
+      <select id="engine">
+        <option value="vm">VM</option>
+        <option value="eval">eval</option>
+      </select>
+    </div>
     <div>
       <label for="program">Write some code:<br></label>
       <textarea id="program" rows="40" cols="100"></textarea>
