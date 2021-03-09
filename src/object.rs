@@ -54,7 +54,8 @@ pub enum Object {
   Array(Vec<Rc<Object>>),
   Hash(HashMap<HashKey, Rc<Object>>),
   Error(String),
-  CompiledFunction(Instructions, usize, usize)
+  CompiledFunction(Instructions, usize, usize),
+  Closure(Box<Object>, Vec<Rc<Object>>)
 }
 
 impl Object {
@@ -92,6 +93,9 @@ impl Object {
       },
       Object::CompiledFunction(_,_,_) => {
         "COMPILED_FUNCTION".to_string()
+      },
+      Object::Closure(_, _) => {
+        "CLOSURE".to_string()
       }
     }
   }
@@ -135,6 +139,9 @@ impl Object {
       },
       Object::CompiledFunction(cf, _, _) => {
         format!("{:?}", cf)
+      },
+      Object::Closure(cf, free) => {
+        format!("{:?} {:?}", cf, free)
       }
     }
   }

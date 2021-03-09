@@ -31,11 +31,18 @@ impl Frame {
   }
   fn instructions(&self) -> Instructions {
     match &*self.func {
-      Object::CompiledFunction(ins, _, _) => {
-        ins.to_vec()
-      },
+      Object::Closure(closure, _) => {
+        match &**closure {
+          Object::CompiledFunction(ins, _, _) => {
+            ins.to_vec()
+          },
+          _ => {
+            panic!("function not stored in closure")
+          }
+        }
+      }
       _ => {
-        panic!("function not stored in frame")
+        panic!("closure not stored in frame {:?}", &self.func)
       }
     }
   }
@@ -54,7 +61,8 @@ pub struct VM {
 impl VM {
   pub fn new(bytecode: Bytecode) -> VM {
     let main_func = Object::CompiledFunction(bytecode.instructions, 0, 0);
-    let frame = Frame::new(Rc::new(main_func), 0);
+    let main_closure = Object::Closure(Box::new(main_func), vec![]);
+    let frame = Frame::new(Rc::new(main_closure), 0);
     let mut frames = Vec::<Frame>::with_capacity(MAX_FRAMES);
     frames.push(frame);
     VM {
@@ -266,28 +274,31 @@ impl VM {
           let num_args = u8::from_be_bytes(instructions[ip..ip + 1].try_into().unwrap()) as usize;
           ip += 1;
           self.set_ip(ip);
-          let func = self.stack[self.sp - 1 - num_args].clone();
-          if let Object::CompiledFunction(_, num_locals, num_params) = *func {
-            if num_params != num_args {
-              panic!("wrong number of arguments wanted {} got {}", num_params, num_args);
-            }
-            let frame = Frame::new(func, self.sp - num_args);
-            let bp = frame.base_pointer;
-            self.push_frame(frame);
-            self.sp = bp + num_locals;
-          } else if let Object::BuiltIn(builtin) = *func {
-            let args = self.stack[self.sp - num_args..self.sp].to_vec();
-            let result = builtin(args);
-            self.sp = self.sp - num_args - 1;
-            if let Object::Null = *result {
-              self.push(NULL);
+          let closure = self.stack[self.sp - 1 - num_args].clone();
+          if let Object::Closure(func, _) = &*closure {
+            if let Object::CompiledFunction(_, num_locals, num_params) = **func {
+              if num_params != num_args {
+                panic!("wrong number of arguments wanted {} got {}", num_params, num_args);
+              }
+              let frame = Frame::new(closure, self.sp - num_args);
+              let bp = frame.base_pointer;
+              self.push_frame(frame);
+              self.sp = bp + num_locals;
+            } else if let Object::BuiltIn(builtin) = **func {
+              let args = self.stack[self.sp - num_args..self.sp].to_vec();
+              let result = builtin(args);
+              self.sp = self.sp - num_args - 1;
+              if let Object::Null = *result {
+                self.push(NULL);
+              } else {
+                self.push_rc(result);
+              }
             } else {
-              self.push_rc(result);
+              panic!("calling non-function")
             }
           } else {
-            panic!("caling non-function")
+            panic!("expected closure got {:?}", &*closure);
           }
-
         },
         Opcode::OpReturnValue => {
           let return_value = self.pop();
@@ -313,6 +324,33 @@ impl VM {
           } else {
             panic!("function not found");
           }
+        }
+        Opcode::OpClosure => {
+          let index = u16::from_be_bytes(instructions[ip..ip + 2].try_into().unwrap()) as usize;
+          let num_free = u8::from_be_bytes(instructions[ip + 2..ip + 3].try_into().unwrap()) as usize;
+          let func = self.constants[index].clone();
+          let mut free_objs = Vec::with_capacity(num_free);
+          for i in 0..num_free {
+            free_objs.push(self.stack[self.sp - num_free + i].clone());
+          }
+          self.sp -= num_free;
+          self.push(Object::Closure(Box::new(func), free_objs));
+          ip += 3;
+          self.set_ip(ip);
+        },
+        Opcode::OpGetFree => {
+          let index = u8::from_be_bytes(instructions[ip..ip + 1].try_into().unwrap()) as usize;
+          ip += 1;
+          self.set_ip(ip);
+          let val = if let Object::Closure(_, free) = &*self.current_frame().func {
+            free[index].clone()
+          } else {
+            panic!("attemtping to get free on non closure");
+          };
+          self.push_rc(val);
+        },
+        Opcode::OpCurrentClosure => {
+          self.push_rc(self.current_frame().func.clone())
         }
       }
     }
@@ -841,6 +879,66 @@ mod tests {
         };
         outer();".to_string(),
         expected: Object::Integer(10)
+      },
+      VMTestCase {
+        input: "
+          let newClosure = fn(a) {
+            fn() { a; };
+          }
+          let closure = newClosure(99);
+          closure();
+        ".to_string(),
+        expected: Object::Integer(99)
+      },
+      VMTestCase {
+        input: "
+          let newAdder = fn(a, b) {
+            fn (c) { a + b + c };
+          }
+          let adder = newAdder(1, 2);
+          adder(8);
+        ".to_string(),
+        expected: Object::Integer(11)
+      },
+      VMTestCase {
+        input: "
+          let newAdder = fn(a, b) {
+            let c = a + b;
+            fn(d) { c + d };
+          }
+          let adder = newAdder(1, 2);
+          adder(8);
+        ".to_string(),
+        expected: Object::Integer(11)
+      },
+      VMTestCase {
+        input: "
+          let countDown = fn(x) {
+            if (x == 0) {
+              return 0;
+            } else {
+              countDown(x - 1);
+            }
+          }
+          countDown(1);
+        ".to_string(),
+        expected: Object::Integer(0)
+      },
+      VMTestCase {
+        input: "
+          let wrapper = fn () {
+            let countDown = fn(x) {
+              if (x == 0) {
+                return 0;
+              } else {
+                countDown(x - 1);
+              }
+            }
+            countDown(1);
+          }
+          wrapper();
+        ".to_string(),
+        expected: Object::Integer(0)
       }
     ];
     for test in tests {

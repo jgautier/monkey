@@ -28,7 +28,10 @@ pub enum Opcode {
   OpReturn,
   OpSetLocal,
   OpGetLocal,
-  OpGetBuiltIn
+  OpGetBuiltIn,
+  OpClosure,
+  OpGetFree,
+  OpCurrentClosure
 }
 
 #[derive(Debug)]
@@ -66,8 +69,10 @@ impl Opcode {
       Opcode::OpReturn => Definition {name: "OpReturn".to_string(), operand_widths: vec![]},
       Opcode::OpSetLocal => Definition {name: "OpSetLocal".to_string(), operand_widths: vec![1]},
       Opcode::OpGetLocal => Definition {name: "OpGetLocal".to_string(), operand_widths: vec![1]},
-      Opcode::OpGetBuiltIn => Definition {name: "OpGetBuiltIn".to_string(), operand_widths: vec![1]}
-
+      Opcode::OpGetBuiltIn => Definition {name: "OpGetBuiltIn".to_string(), operand_widths: vec![1]},
+      Opcode::OpClosure => Definition {name: "OpClosure".to_string(), operand_widths: vec![2, 1]},
+      Opcode::OpGetFree => Definition {name: "OpGetFree".to_string(), operand_widths: vec![1]},
+      Opcode::OpCurrentClosure => Definition {name: "OpCurrentClosure".to_string(), operand_widths: vec![]}
     }
   }
   pub fn lookup(op: u8) -> Opcode {
@@ -99,6 +104,9 @@ impl Opcode {
       24 => Opcode::OpSetLocal,
       25 => Opcode::OpGetLocal,
       26 => Opcode::OpGetBuiltIn,
+      27 => Opcode::OpClosure,
+      28 => Opcode::OpGetFree,
+      29 => Opcode::OpCurrentClosure,
       _ => panic!("unknown op code")
     }
   }
@@ -119,7 +127,7 @@ impl InstructionsExt for Instructions {
       let (operands, read_bytes) = read_operands(&definition, self[index + 1..].to_vec());
       match definition.operand_widths.len() {
         0 => output += &format!("{:0>4} {}\n", index, definition.name),
-        1 => output += &format!("{:0>4} {}\n", index, format_instruction(&definition, operands)).to_string(),
+        1 | 2 => output += &format!("{:0>4} {}\n", index, format_instruction(&definition, operands)).to_string(),
         _ => panic!("invalid operand width")
       }
       index += 1 + read_bytes;
@@ -132,6 +140,7 @@ fn format_instruction(definition: &Definition, operands: Vec<u32>) -> String {
   let operand_count = operands.len();
   match operand_count {
     1 => format!("{} {}", definition.name, operands[0]),
+    2 => format!("{} {} {}", definition.name, operands[0], operands[1]),
     _ => panic!("invalid operand count")
   }
 }
@@ -205,6 +214,11 @@ mod tests {
       operands: vec![255],
       expected: vec![Opcode::OpGetLocal as u8, 255]
     });
+    tests.push(TestOp {
+      op: Opcode::OpClosure,
+      operands: vec![65534, 255],
+      expected: vec![Opcode::OpClosure as u8, 255, 254, 255]
+    });
     for test in tests {
       let instruction = make(test.op, &test.operands);
       assert_eq!(instruction.len(), test.expected.len());
@@ -226,11 +240,13 @@ mod tests {
     instructions.append(&mut make(Opcode::OpGetLocal, &vec![1]));
     instructions.append(&mut make(Opcode::OpConstant, &vec![2]));
     instructions.append(&mut make(Opcode::OpConstant, &vec![65535]));
+    instructions.append(&mut make(Opcode::OpClosure, &vec![65535, 255]));
 
     let expected = "0000 OpAdd
 0001 OpGetLocal 1
 0003 OpConstant 2
 0006 OpConstant 65535
+0009 OpClosure 65535 255
 ";
 
     assert_eq!(expected, instructions.string())
@@ -248,6 +264,11 @@ mod tests {
       op: Opcode::OpGetLocal,
       operands: vec![255],
       bytes_read: 1
+    });
+    tests.push(TestRead {
+      op: Opcode::OpClosure,
+      operands: vec![65535, 255],
+      bytes_read: 3
     });
     for test in tests.iter() {
       let instructions = make(test.op, &test.operands);

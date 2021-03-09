@@ -68,7 +68,7 @@ impl Evaluator {
       ast::Expression::Call{ function, args } => {
         self.eval_call_expression(function, args, environment)
       }
-      ast::Expression::Fn{ params, body } => {
+      ast::Expression::Fn{ params, body , ..} => {
         Rc::new(Object::Function{ params: params.to_vec(), body: body.clone(), env: Rc::clone(environment) })
       },
       ast::Expression::StringLiteral(value) => {

@@ -89,7 +89,7 @@ pub enum Expression {
     Prefix{ operator: String, right: Box<Expression> },
     Infix{ operator: String, left: Box<Expression>, right: Box<Expression> },
     If{ condition: Box<Expression>, consequence: BlockStatement, alternative: Option<BlockStatement> },
-    Fn{ params: Vec<String>, body: BlockStatement },
+    Fn{ params: Vec<String>, body: BlockStatement, name: String },
     Call{ function: Box<Expression>, args: Vec<Expression> },
     Index{ left: Box<Expression>, index: Box<Expression> }
 }
@@ -120,7 +120,7 @@ impl Node for Expression {
                 strs.push(";".to_string());
                 strs.concat()
             },
-            Expression::Fn{ params, body } => {
+            Expression::Fn{ params, body, .. } => {
                 let mut strs = vec!["fn(".to_string()];
                 strs.push(params.iter().map(|param| param.to_string()).collect::<Vec<String>>().join(", "));
                 strs.push((") ").to_string());
@@ -237,12 +237,14 @@ impl<'a> Parser<'a> {
                 return None;
             }
             self.next_token();
-            let value = self.parse_expression(OperatorPrecedence::LOWEST).unwrap();
+            let mut value = self.parse_expression(OperatorPrecedence::LOWEST).unwrap();
 
             if self.peek_token == lexer::Token::SEMICOLON {
                 self.next_token();
             }
-
+            if let Expression::Fn {ref mut name, ..} = value {
+                *name = identifier.to_string();
+            }
             Some(Statement::Let{ identifier, value })
         } else {
             None
@@ -328,7 +330,7 @@ impl<'a> Parser<'a> {
             return None;
         }
         let body = self.parse_block_statement()?;
-        Some(Expression::Fn{ params, body })
+        Some(Expression::Fn{ params, body, name: "TBD".to_string() })
     }
 
     fn parse_if_expression(&mut self) -> Option<Expression> {
@@ -933,5 +935,20 @@ mod tests {
         let program = parser.parse();
         check_parse_errors(parser);
         assert_eq!(fn_str, &program.to_string());
+    }
+    #[test]
+    fn test_function_literal_with_name() {
+        let fn_str = "let myFunction = fn() {  };\n";
+        let lexer = lexer::Lexer::new(&fn_str);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse();
+        check_parse_errors(parser);
+        assert_eq!(fn_str, &program.to_string());
+        let statement = &program.statements[0];
+        if let Statement::Let{ identifier, value } = statement {
+            if let Expression::Fn { name, .. } = value {
+                assert_eq!(identifier, name);
+            }
+        }
     }
 }
