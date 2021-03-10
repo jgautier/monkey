@@ -42,7 +42,7 @@ impl HashKey {
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Object {
   Integer(i64),
   String(String),
@@ -55,7 +55,7 @@ pub enum Object {
   Hash(HashMap<HashKey, Rc<Object>>),
   Error(String),
   CompiledFunction(Instructions, usize, usize),
-  Closure(Box<Object>, Vec<Rc<Object>>)
+  Closure(Rc<Object>, Vec<Rc<Object>>)
 }
 
 impl Object {
@@ -177,9 +177,9 @@ impl Environment {
 
 pub type Env = Rc<RefCell<Environment>>;
 
-pub fn get_built_in_vec() -> Vec<(String, Object)> {
+pub fn get_built_in_vec() -> Vec<(String, Rc<Object>)> {
   vec![
-    ("len".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
+    ("len".to_string(), Rc::new(Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
       if args.len() > 1 {
         return Rc::new(Object::Error(format!("Expected 1 argument got {}", args.len())));
       }
@@ -194,8 +194,8 @@ pub fn get_built_in_vec() -> Vec<(String, Object)> {
           Rc::new(Object::Error(format!("Expected a String or Array got a {}", args[0].object_type())))
         }
       }
-    })),
-    ("first".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
+    }))),
+    ("first".to_string(), Rc::new(Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
       if args.len() > 1 {
         return Rc::new(Object::Error(format!("Expected 1 argument got {}", args.len())))
       }
@@ -207,8 +207,8 @@ pub fn get_built_in_vec() -> Vec<(String, Object)> {
           Rc::new(Object::Error(format!("Expected a Array got a {}", args[0].object_type())))
         }
       }
-    })),
-    ("last".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
+    }))),
+    ("last".to_string(), Rc::new(Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
       if args.len() > 1 {
         return Rc::new(Object::Error(format!("Expected 1 argument got {}", args.len())));
       }
@@ -223,8 +223,8 @@ pub fn get_built_in_vec() -> Vec<(String, Object)> {
           Rc::new(Object::Error(format!("Expected a Array got a {}", args[0].object_type())))
         }
       }
-    })),
-    ("rest".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
+    }))),
+    ("rest".to_string(), Rc::new(Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
       if args.len() > 1 {
         return Rc::new(Object::Error(format!("Expected 1 argument got {}", args.len())));
       }
@@ -240,8 +240,8 @@ pub fn get_built_in_vec() -> Vec<(String, Object)> {
           Rc::new(Object::Error(format!("Expected a Array got a {}", args[0].object_type())))
         }
       }
-    })),
-    ("push".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
+    }))),
+    ("push".to_string(), Rc::new(Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
       if args.len() > 2 {
         return Rc::new(Object::Error(format!("Expected 2 argument got {}", args.len())))
       }
@@ -255,16 +255,16 @@ pub fn get_built_in_vec() -> Vec<(String, Object)> {
           Rc::new(Object::Error(format!("Expected a Array got a {}", args[0].object_type())))
         }
       }
-    })),
-    ("puts".to_string(), Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
+    }))),
+    ("puts".to_string(), Rc::new(Object::BuiltIn(|args: Vec<Rc<Object>>| -> Rc<Object> {
       for arg in args {
         println!("{}", arg.inspect())
       }
       Rc::new(Object::Null)
-    }))
+    })))
   ]
 }
-pub fn get_built_in_map() -> HashMap<String, Object> {
+pub fn get_built_in_map() -> HashMap<String, Rc<Object>> {
   let mut built_in_map = HashMap::new();
   let built_ins = get_built_in_vec();
   for built_in in built_ins {

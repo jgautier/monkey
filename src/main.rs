@@ -18,7 +18,7 @@ fn print_prompt() {
 }
 fn start(engine: &str) {
     let evaluator = &monkey::Evaluator::new();
-    let mut constants:Vec<monkey::object::Object> = Vec::new();
+    let mut constants:Vec<Rc<monkey::object::Object>> = Vec::new();
     let mut symbols:monkey::compiler::SymbolTable = monkey::compiler::SymbolTable::new();
     let built_ins = monkey::object::get_built_in_vec();
     for (i, built_in) in built_ins.into_iter().enumerate() {

@@ -9,6 +9,7 @@ use crate::ast::BlockStatement;
 use crate::ast::Expression;
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::rc::Rc;
 
 #[derive(Clone)]
 struct EmittedInstruction {
@@ -117,7 +118,7 @@ struct CompilationScope {
 }
 
 pub struct Compiler {
-  pub constants: Vec<Object>,
+  pub constants: Vec<Rc<Object>>,
   pub symbol_table: SymbolTable,
   scopes: Vec<CompilationScope>,
   scope_index: usize
@@ -148,7 +149,7 @@ impl Compiler {
       scope_index: 0
     }
   }
-  pub fn new_with_state(symbol_table: SymbolTable, constants: Vec<Object>) -> Compiler {
+  pub fn new_with_state(symbol_table: SymbolTable, constants: Vec<Rc<Object>>) -> Compiler {
     Compiler {
       scopes: vec![
         CompilationScope {
@@ -368,7 +369,7 @@ impl Compiler {
   }
 
   fn add_constant(&mut self, obj: Object) -> u32 {
-    self.constants.push(obj);
+    self.constants.push(Rc::new(obj));
     let position: u32 = (&self.constants.len() - 1).try_into().unwrap();
     position
   }
@@ -424,7 +425,7 @@ impl Compiler {
 
 pub struct Bytecode {
   pub instructions: Instructions,
-  pub constants: Vec<Object>
+  pub constants: Vec<Rc<Object>>
 }
 
 #[cfg(test)]
@@ -1158,7 +1159,7 @@ mod tests {
         assert_eq!(bytecode.instructions[i], *expected_instruction);
       }
       for (i, constant) in test.expected_constants.iter().enumerate() {
-        match (&bytecode.constants[i], constant) {
+        match (&*bytecode.constants[i], constant) {
           (Object::Integer(val), Object::Integer(val2)) => assert_eq!(val, val2),
           (Object::String(str1), Object::String(str2)) => assert_eq!(str1, str2),
           (Object::CompiledFunction(ins1, _, _), Object::CompiledFunction(ins2, _, _)) => {

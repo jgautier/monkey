@@ -2,7 +2,7 @@ use wasm_bindgen::prelude::*;
 pub mod eval;
 mod ast;
 mod lexer;
-mod code;
+pub mod code;
 pub mod object;
 pub mod compiler;
 mod vm;

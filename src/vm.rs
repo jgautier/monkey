@@ -29,12 +29,12 @@ impl Frame {
       base_pointer
     }
   }
-  fn instructions(&self) -> Instructions {
+  fn instructions(&self) -> &Instructions {
     match &*self.func {
       Object::Closure(closure, _) => {
         match &**closure {
           Object::CompiledFunction(ins, _, _) => {
-            ins.to_vec()
+            ins
           },
           _ => {
             panic!("function not stored in closure")
@@ -49,25 +49,25 @@ impl Frame {
 }
 
 pub struct VM {
-  constants: Vec<Object>,
+  constants: Vec<Rc<Object>>,
   pub globals: Vec<Rc<Object>>,
   stack: Vec<Rc<Object>>,
   sp: usize,
   frames: Vec<Frame>,
   frames_index: usize,
-  built_ins: Vec<(String, Object)>
+  built_ins: Vec<(String, Rc<Object>)>
 }
 
 impl VM {
   pub fn new(bytecode: Bytecode) -> VM {
     let main_func = Object::CompiledFunction(bytecode.instructions, 0, 0);
-    let main_closure = Object::Closure(Box::new(main_func), vec![]);
+    let main_closure = Object::Closure(Rc::new(main_func), vec![]);
     let frame = Frame::new(Rc::new(main_closure), 0);
     let mut frames = Vec::<Frame>::with_capacity(MAX_FRAMES);
     frames.push(frame);
     VM {
       constants: bytecode.constants,
-      globals: Vec::with_capacity(GLOBALS_SIZE),
+      globals: vec![Rc::new(NULL); GLOBALS_SIZE],
       stack: vec![Rc::new(NULL); STACK_SIZE],
       sp: 0,
       frames,
@@ -111,28 +111,24 @@ impl VM {
   pub fn run(&mut self) {
     while self.current_frame().ip < self.current_frame().instructions().len() {
       let mut ip = self.current_frame().ip;
-      let instructions = self.current_frame().instructions();
-      let op = Opcode::lookup(instructions[ip]);
+      let instruction = self.current_frame().instructions()[ip];
+      let op = Opcode::lookup(instruction);
       ip += 1;
       self.set_ip(ip);
+      let instructions = self.current_frame().instructions();
       match op {
         Opcode::OpSetGlobal => {
           let global_index = u16::from_be_bytes(instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
           ip += 2;
           self.set_ip(ip);
-          let len = self.globals.len();
           let global = self.pop();
-          if len <= global_index {
-            self.globals.push(global);
-          } else {
-            self.globals[global_index] = global;
-          }
+          self.globals[global_index] = global;
         }
         Opcode::OpGetGlobal => {
           let global_index = u16::from_be_bytes(instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
           ip += 2;
           self.set_ip(ip);
-          self.push((*self.globals[global_index]).clone())
+          self.push_rc(self.globals[global_index].clone())
         }
         Opcode::OpSetLocal => {
           let local_index = u8::from_be_bytes(instructions[ip..ip + 1].try_into().expect("invalid slice")) as usize;
@@ -152,10 +148,7 @@ impl VM {
           self.push(NULL);
         }
         Opcode::OpConstant => {
-          let const_index = u16::from_be_bytes(instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
-          self.push(self.constants[const_index].clone());
-          ip += 2;
-          self.set_ip(ip);
+          self.push_constant(ip);
         }
         Opcode::OpJumpNotTruthy  => {
           let pos = u16::from_be_bytes(instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
@@ -271,34 +264,7 @@ impl VM {
           }
         },
         Opcode::OpCall => {
-          let num_args = u8::from_be_bytes(instructions[ip..ip + 1].try_into().unwrap()) as usize;
-          ip += 1;
-          self.set_ip(ip);
-          let closure = self.stack[self.sp - 1 - num_args].clone();
-          if let Object::Closure(func, _) = &*closure {
-            if let Object::CompiledFunction(_, num_locals, num_params) = **func {
-              if num_params != num_args {
-                panic!("wrong number of arguments wanted {} got {}", num_params, num_args);
-              }
-              let frame = Frame::new(closure, self.sp - num_args);
-              let bp = frame.base_pointer;
-              self.push_frame(frame);
-              self.sp = bp + num_locals;
-            } else if let Object::BuiltIn(builtin) = **func {
-              let args = self.stack[self.sp - num_args..self.sp].to_vec();
-              let result = builtin(args);
-              self.sp = self.sp - num_args - 1;
-              if let Object::Null = *result {
-                self.push(NULL);
-              } else {
-                self.push_rc(result);
-              }
-            } else {
-              panic!("calling non-function")
-            }
-          } else {
-            panic!("expected closure got {:?}", &*closure);
-          }
+          self.call_function(ip);
         },
         Opcode::OpReturnValue => {
           let return_value = self.pop();
@@ -320,7 +286,7 @@ impl VM {
           let def = self.built_ins.get(index);
           if let Some(builtin) = def {
             let func = builtin.1.clone();
-            self.push(func);
+            self.push_rc(func);
           } else {
             panic!("function not found");
           }
@@ -334,7 +300,7 @@ impl VM {
             free_objs.push(self.stack[self.sp - num_free + i].clone());
           }
           self.sp -= num_free;
-          self.push(Object::Closure(Box::new(func), free_objs));
+          self.push(Object::Closure(func, free_objs));
           ip += 3;
           self.set_ip(ip);
         },
@@ -354,6 +320,44 @@ impl VM {
         }
       }
     }
+  }
+  fn call_function(&mut self, ip: usize) {
+    let instructions = self.current_frame().instructions();
+    let num_args = u8::from_be_bytes(instructions[ip..ip + 1].try_into().unwrap()) as usize;
+    let ip = ip + 1;
+    self.set_ip(ip);
+    let closure = self.stack[self.sp - 1 - num_args].clone();
+    if let Object::Closure(func, _) = &*closure {
+      if let Object::CompiledFunction(_, num_locals, num_params) = **func {
+        if num_params != num_args {
+          panic!("wrong number of arguments wanted {} got {}", num_params, num_args);
+        }
+        let frame = Frame::new(closure, self.sp - num_args);
+        let bp = frame.base_pointer;
+        self.push_frame(frame);
+        self.sp = bp + num_locals;
+      } else if let Object::BuiltIn(builtin) = **func {
+        let args = self.stack[self.sp - num_args..self.sp].to_vec();
+        let result = builtin(args);
+        self.sp = self.sp - num_args - 1;
+        if let Object::Null = *result {
+          self.push(NULL);
+        } else {
+          self.push_rc(result);
+        }
+      } else {
+        panic!("calling non-function")
+      }
+    } else {
+      panic!("expected closure got {:?}", &*closure);
+    }
+  }
+  fn push_constant(&mut self, ip: usize) {
+    let instructions = self.current_frame().instructions();
+    let const_index = u16::from_be_bytes(instructions[ip..ip + 2].try_into().expect("invalid slice")) as usize;
+    let ip = ip + 2;
+    self.push_rc(self.constants[const_index].clone());
+    self.set_ip(ip);
   }
   fn is_truthy(&self, obj: Rc<Object>) -> bool {
     match *obj {

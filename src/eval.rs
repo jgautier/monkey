@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 pub struct Evaluator {
   env: Env,
-  built_ins: HashMap<String, Object>,
+  built_ins: HashMap<String, Rc<Object>>,
   null: Rc<Object>
 }
 
@@ -157,7 +157,7 @@ impl Evaluator {
       return obj
     }
     if let Some(obj) = self.built_ins.get(&id.to_string()) {
-      return Rc::new(obj.clone())
+      return obj.clone();
     }
     Rc::new(Object::Error(format!("identifier not found: {}", id)))
   }

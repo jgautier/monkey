@@ -1,8 +1,12 @@
-use jemallocator::Jemalloc;
 use std::time::{Instant};
 
+#[cfg(not(target_arch = "wasm32"))]
+use jemallocator::Jemalloc;
+
+#[cfg(not(target_arch = "wasm32"))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
+
 
 fn main() {
     let fib = "
